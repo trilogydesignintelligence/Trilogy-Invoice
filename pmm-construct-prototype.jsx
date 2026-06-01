@@ -341,6 +341,113 @@ function laborAmount(s) {
   return hours * person.rate;
 }
 
+/* ---- Hours-source PDF parsing ----
+   Two real formats we know about today:
+   (1) Mark's monthly hours come as a Buildertrend Daily Log export
+       with one entry per day; each entry's hours sit on a line of
+       the form "Title: 4 hours" (occasionally "Title: 5.5 Hours"
+       with a capital H). Verified on a real May 2026 export: the
+       20 entries sum to 87 hours, matching the hand-totalled figure.
+   (2) Michael sends an email; the summary line reads like
+       "46 Total for May@ $175 $8050". As a fallback we sum the
+       individual day entries which look like "5/2 1D Jackson Zoom..."
+       or "1-12 10D Work on Model..." (D = hours). Verified: both
+       paths recover 46 hours on the real May 2026 email.
+   Both formats are heuristic. If Buildertrend changes its export or
+   Michael changes his email format, the parser may need an update.
+   The extracted total always fills an editable field — nothing is
+   ever auto-finalized. */
+function parseHoursPdf(lines) {
+  // (1) Buildertrend Daily Log: "Title: N hours" lines.
+  const btEntries = [];
+  for (const line of lines) {
+    const m = line.match(/^\s*Title:\s*([\d.]+)\s*[Hh]ours?\s*$/);
+    if (m) {
+      const h = parseFloat(m[1]);
+      if (!isNaN(h)) btEntries.push(h);
+    }
+  }
+  if (btEntries.length > 0) {
+    return {
+      total: btEntries.reduce((s, h) => s + h, 0),
+      entries: btEntries.map((h, i) =>
+        ({ label: `Entry ${i + 1}`, hours: h })),
+      basis: `${btEntries.length} Buildertrend Daily Log entries`,
+      confidence: "high",
+    };
+  }
+  // (2) Email summary line: "46 Total for May@ $175 $8050".
+  for (const line of lines) {
+    const m = line.match(/(\d+(?:\.\d+)?)\s+Total\s+for/i);
+    if (m) {
+      const total = parseFloat(m[1]);
+      if (!isNaN(total)) {
+        return {
+          total, entries: [],
+          basis: "Email summary line",
+          confidence: "high",
+        };
+      }
+    }
+  }
+  // (3) Email per-day entries: "5/2 1D Jackson Zoom..." or "1-12 10D ...".
+  const emailEntries = [];
+  for (const line of lines) {
+    const m = line.match(/^\s*([\d\/.-]+)\s+(\d+(?:\.\d+)?)D\s/);
+    if (m) {
+      const h = parseFloat(m[2]);
+      if (!isNaN(h)) emailEntries.push({ label: m[1], hours: h });
+    }
+  }
+  if (emailEntries.length > 0) {
+    return {
+      total: emailEntries.reduce((s, e) => s + e.hours, 0),
+      entries: emailEntries,
+      basis: `Summed ${emailEntries.length} day entries`,
+      confidence: "medium",
+    };
+  }
+  return {
+    total: 0, entries: [],
+    basis: "Couldn't recognize the format",
+    confidence: "low",
+  };
+}
+
+async function parseHoursFromFile(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (ext !== "pdf") {
+    return {
+      ok: false, total: 0, entries: [], rawText: [],
+      basis: "Only PDFs are supported for hours import",
+      confidence: "low", source: file.name,
+    };
+  }
+  try {
+    const { lines } = await extractPdfText(file);
+    if (lines.length === 0) {
+      return {
+        ok: false, total: 0, entries: [], rawText: [],
+        basis: "No text layer — likely a scan",
+        confidence: "low", source: file.name,
+      };
+    }
+    const result = parseHoursPdf(lines);
+    return {
+      ok: result.total > 0,
+      ...result,
+      rawText: lines,
+      source: file.name,
+    };
+  } catch (err) {
+    return {
+      ok: false, total: 0, entries: [], rawText: [],
+      basis: "Couldn't parse the PDF: " + err.message,
+      confidence: "low", source: file.name,
+    };
+  }
+}
+
 /* ============================================================
    PDF GENERATION  —  design-system-correct invoice output
    ============================================================ */
@@ -540,6 +647,254 @@ async function generateInvoicePdf(opts) {
    render, causing React to remount inputs and lose focus when
    typing. Keep it here.
    ============================================================ */
+/* ============================================================
+   LaborSubRow — TOP-LEVEL component for Trilogy Labor lines.
+   Lives separately from SubRow because it uses hooks (useRef for
+   the per-row hours-PDF file picker, useState for the parsing
+   spinner). Splitting it out keeps the rules of hooks happy and
+   keeps SubRow's logic readable.
+   ============================================================ */
+function LaborSubRow({ s, updateSub, removeSub }) {
+  const person = LABOR_PEOPLE[s.laborPerson];
+  const cat = laborCategory(s);
+  const calcAmt = laborAmount(s);
+  const isMiller = s.laborPerson === "miller";
+  const hoursFileRef = useRef(null);
+  const [parsingHours, setParsingHours] = useState(false);
+
+  const onUploadHours = async (e) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    setParsingHours(true);
+    const result = await parseHoursFromFile(file);
+    setParsingHours(false);
+    updateSub(s.id, {
+      laborHours: result.ok ? String(result.total) : s.laborHours,
+      laborSource: result.source,
+      laborEntries: result.entries,
+      laborBasis: result.basis,
+      laborSourceOk: result.ok,
+      rawText: result.rawText,
+    });
+    // reset so the same file can be re-picked if needed
+    if (hoursFileRef.current) hoursFileRef.current.value = "";
+  };
+
+  const clearHoursSource = () =>
+    updateSub(s.id, {
+      laborSource: "", laborEntries: [], laborBasis: "",
+      laborSourceOk: false, rawText: [], showRaw: false,
+    });
+
+  return (
+    <div style={{
+      border: `1px solid ${T.burg500}`,
+      background: T.burg100,
+      borderRadius: 6, padding: "14px 16px",
+      boxShadow: T.shadowSm,
+    }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        alignItems: "baseline", marginBottom: 12,
+      }}>
+        <span style={{
+          fontFamily: FONT.mono, fontSize: 10,
+          letterSpacing: ".14em", textTransform: "uppercase",
+          color: T.burg700, fontWeight: 500,
+        }}>
+          {person ? `${person.fullName} — Trilogy Labor` : "Labor"}
+        </span>
+        <button onClick={() => removeSub(s.id)} style={{
+          border: "none", background: "none", cursor: "pointer",
+          color: T.burg500, fontSize: 18, lineHeight: 1, padding: 0,
+        }} aria-label="Remove">&times;</button>
+      </div>
+
+      {isMiller && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 10,
+            letterSpacing: ".1em", textTransform: "uppercase",
+            color: T.gold700, marginBottom: 5,
+          }}>Category for this invoice</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[
+              { key: "preconstruction", label: "Pre-Construction" },
+              { key: "construction", label: "Construction" },
+            ].map((opt) => {
+              const sel = (s.laborCategory || "preconstruction") === opt.key;
+              return (
+                <button key={opt.key}
+                  onClick={() => updateSub(s.id,
+                    { laborCategory: opt.key })}
+                  style={{
+                    flex: 1, padding: "8px 10px",
+                    fontFamily: FONT.ui, fontSize: 11,
+                    fontWeight: 700, letterSpacing: ".06em",
+                    textTransform: "uppercase",
+                    background: sel ? T.burg700 : T.cream50,
+                    color: sel ? T.cream50 : T.burg700,
+                    border: `1.5px solid ${sel ? T.burg700 : T.cream300}`,
+                    borderRadius: 4, cursor: "pointer",
+                    boxShadow: sel ? T.shadowSm : "none",
+                  }}>{opt.label}</button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Hours-source PDF upload zone */}
+      <div style={{
+        border: `1px dashed ${T.cream300}`,
+        borderRadius: 4, padding: "10px 12px", marginBottom: 10,
+        background: T.cream50,
+      }}>
+        {!s.laborSource ? (
+          <div style={{ display: "flex", alignItems: "center",
+            justifyContent: "space-between", gap: 10 }}>
+            <div style={{ fontFamily: FONT.bodySm, fontSize: 12,
+              color: T.burg800, lineHeight: 1.5 }}>
+              <strong style={{ fontFamily: FONT.ui, fontSize: 11,
+                fontWeight: 700, letterSpacing: ".04em",
+                textTransform: "uppercase", color: T.burg700 }}>
+                Optional:
+              </strong>{" "}
+              upload {isMiller ? "BT Daily Log" : "hours email"} PDF
+              and Construct will read the total.
+            </div>
+            <button
+              disabled={parsingHours}
+              onClick={() => hoursFileRef.current
+                && hoursFileRef.current.click()}
+              style={{
+                fontFamily: FONT.ui, fontSize: 11, fontWeight: 700,
+                letterSpacing: ".06em", textTransform: "uppercase",
+                background: "transparent", color: T.burg700,
+                border: `1.5px solid ${T.burg700}`,
+                borderRadius: 4, padding: "6px 14px",
+                cursor: parsingHours ? "wait" : "pointer",
+                whiteSpace: "nowrap",
+              }}>
+              {parsingHours ? "Reading…" : "Upload PDF"}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: "flex",
+              justifyContent: "space-between", alignItems: "baseline",
+              gap: 10 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5,
+                color: s.laborSourceOk ? T.successText : T.errorText,
+                letterSpacing: ".04em", wordBreak: "break-all" }}>
+                {s.laborSourceOk ? "✓ " : "⚠ "}{s.laborSource}
+              </div>
+              <button onClick={clearHoursSource} style={{
+                border: "none", background: "none", padding: 0,
+                cursor: "pointer", color: T.burg600,
+                fontFamily: FONT.mono, fontSize: 10,
+                textDecoration: "underline", whiteSpace: "nowrap",
+              }}>change file</button>
+            </div>
+            <div style={{ marginTop: 4, fontFamily: FONT.bodySm,
+              fontSize: 12, color: T.burg800 }}>
+              {s.laborBasis}
+              {s.laborSourceOk && s.laborEntries
+                && s.laborEntries.length > 0 && (
+                <>
+                  {" — "}
+                  <button onClick={() => updateSub(s.id,
+                      { showRaw: !s.showRaw })}
+                    style={{
+                      border: "none", background: "none", padding: 0,
+                      cursor: "pointer", color: T.burg700,
+                      textDecoration: "underline",
+                      fontFamily: FONT.bodySm, fontSize: 12,
+                    }}>
+                    {s.showRaw ? "hide" : "view"} {s.laborEntries.length}
+                    {" "}entries
+                  </button>
+                </>
+              )}
+            </div>
+            {s.showRaw && s.laborEntries
+              && s.laborEntries.length > 0 && (
+              <div style={{
+                marginTop: 8, padding: "8px 12px",
+                background: T.cream100,
+                border: `1px solid ${T.cream300}`,
+                borderRadius: 3, maxHeight: 200, overflow: "auto",
+              }}>
+                {s.laborEntries.map((e, i) => (
+                  <div key={i} style={{
+                    fontFamily: FONT.mono, fontSize: 11,
+                    color: T.burg800, display: "flex",
+                    justifyContent: "space-between",
+                    padding: "2px 0",
+                  }}>
+                    <span>{e.label}</span>
+                    <span>{e.hours}h</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <input ref={hoursFileRef} type="file" hidden accept=".pdf"
+          onChange={onUploadHours} />
+      </div>
+
+      {/* Hours × rate = amount */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "100px 90px 1fr 140px", gap: 8,
+        alignItems: "center", marginBottom: 8,
+      }}>
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 10,
+          letterSpacing: ".1em", textTransform: "uppercase",
+          color: T.gold700,
+        }}>Hours</div>
+        <input style={{ ...inputStyle(), textAlign: "right",
+          fontFamily: FONT.display, fontSize: 15 }}
+          value={s.laborHours || ""} placeholder="0"
+          onChange={(e) => updateSub(s.id,
+            { laborHours: e.target.value })} />
+        <div style={{
+          fontFamily: FONT.mono, fontSize: 11,
+          color: T.burg700, textAlign: "right",
+        }}>
+          &times; ${person ? person.rate : 0}/hr
+        </div>
+        <div style={{
+          ...inputStyle(),
+          background: isNaN(calcAmt) ? T.cream100 : T.cream50,
+          border: `1.5px solid ${isNaN(calcAmt) ? T.cream300 : T.burg500}`,
+          textAlign: "right",
+          color: isNaN(calcAmt) ? T.cream400 : T.burg900,
+          fontWeight: isNaN(calcAmt) ? 400 : 700,
+          fontFamily: FONT.display, fontSize: 15,
+        }}>
+          {isNaN(calcAmt) ? "—" : money(calcAmt)}
+        </div>
+      </div>
+
+      <div style={{
+        fontFamily: FONT.body, fontSize: 12, fontStyle: "italic",
+        color: T.burg800, lineHeight: 1.5, marginTop: 4,
+      }}>
+        {laborDescription(s)}
+      </div>
+      <div style={{
+        marginTop: 6, fontFamily: FONT.mono, fontSize: 10,
+        letterSpacing: ".06em", color: T.gold700,
+      }}>
+        {cat ? cat.costCode : ""}
+      </div>
+    </div>
+  );
+}
+
 function SubRow({ s, updateSub, removeSub }) {
   const c = CONF[s.confidence];
   const amt = parseFloat(s.amount);
@@ -624,119 +979,10 @@ function SubRow({ s, updateSub, removeSub }) {
   /* Labor row: locked rate, user types hours. For Mark Miller, the
      category (Pre-Construction vs. Construction) is also user-selected. */
   if (s.kind === "labor") {
-    const person = LABOR_PEOPLE[s.laborPerson];
-    const cat = laborCategory(s);
-    const calcAmt = laborAmount(s);
-    const isMiller = s.laborPerson === "miller";
     return (
-      <div style={{
-        border: `1px solid ${T.burg500}`,
-        background: T.burg100,
-        borderRadius: 6, padding: "14px 16px",
-        boxShadow: T.shadowSm,
-      }}>
-        <div style={{
-          display: "flex", justifyContent: "space-between",
-          alignItems: "baseline", marginBottom: 12,
-        }}>
-          <span style={{
-            fontFamily: FONT.mono, fontSize: 10,
-            letterSpacing: ".14em", textTransform: "uppercase",
-            color: T.burg700, fontWeight: 500,
-          }}>
-            {person ? `${person.fullName} — Trilogy Labor` : "Labor"}
-          </span>
-          <button onClick={() => removeSub(s.id)} style={{
-            border: "none", background: "none", cursor: "pointer",
-            color: T.burg500, fontSize: 18, lineHeight: 1, padding: 0,
-          }} aria-label="Remove">&times;</button>
-        </div>
-
-        {isMiller && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{
-              fontFamily: FONT.mono, fontSize: 10,
-              letterSpacing: ".1em", textTransform: "uppercase",
-              color: T.gold700, marginBottom: 5,
-            }}>Category for this invoice</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {[
-                { key: "preconstruction", label: "Pre-Construction" },
-                { key: "construction", label: "Construction" },
-              ].map((opt) => {
-                const sel = (s.laborCategory || "preconstruction") === opt.key;
-                return (
-                  <button key={opt.key}
-                    onClick={() => updateSub(s.id,
-                      { laborCategory: opt.key })}
-                    style={{
-                      flex: 1, padding: "8px 10px",
-                      fontFamily: FONT.ui, fontSize: 11,
-                      fontWeight: 700, letterSpacing: ".06em",
-                      textTransform: "uppercase",
-                      background: sel ? T.burg700 : T.cream50,
-                      color: sel ? T.cream50 : T.burg700,
-                      border: `1.5px solid ${sel ? T.burg700 : T.cream300}`,
-                      borderRadius: 4, cursor: "pointer",
-                      boxShadow: sel ? T.shadowSm : "none",
-                    }}>{opt.label}</button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "100px 90px 1fr 140px", gap: 8,
-          alignItems: "center", marginBottom: 8,
-        }}>
-          <div style={{
-            fontFamily: FONT.mono, fontSize: 10,
-            letterSpacing: ".1em", textTransform: "uppercase",
-            color: T.gold700,
-          }}>Hours</div>
-          <input style={{ ...inputStyle(), textAlign: "right",
-            fontFamily: FONT.display, fontSize: 15 }}
-            value={s.laborHours || ""}
-            placeholder="0"
-            onChange={(e) => updateSub(s.id,
-              { laborHours: e.target.value })} />
-          <div style={{
-            fontFamily: FONT.mono, fontSize: 11,
-            color: T.burg700, textAlign: "right",
-          }}>
-            &times; ${person ? person.rate : 0}/hr
-          </div>
-          <div style={{
-            ...inputStyle(),
-            background: isNaN(calcAmt) ? T.cream100 : T.cream50,
-            border: `1.5px solid ${isNaN(calcAmt) ? T.cream300 : T.burg500}`,
-            textAlign: "right",
-            color: isNaN(calcAmt) ? T.cream400 : T.burg900,
-            fontWeight: isNaN(calcAmt) ? 400 : 700,
-            fontFamily: FONT.display, fontSize: 15,
-          }}>
-            {isNaN(calcAmt) ? "—" : money(calcAmt)}
-          </div>
-        </div>
-
-        <div style={{
-          fontFamily: FONT.body, fontSize: 12, fontStyle: "italic",
-          color: T.burg800, lineHeight: 1.5, marginTop: 4,
-        }}>
-          {laborDescription(s)}
-        </div>
-        <div style={{
-          marginTop: 6, fontFamily: FONT.mono, fontSize: 10,
-          letterSpacing: ".06em", color: T.gold700,
-        }}>
-          {cat ? cat.costCode : ""}
-        </div>
-      </div>
+      <LaborSubRow s={s} updateSub={updateSub} removeSub={removeSub} />
     );
   }
-
   /* Standard sub-invoice row. */
   return (
     <div style={{
@@ -982,6 +1228,10 @@ export default function App() {
       laborHours: "",
       // Only meaningful for Miller; Rath has a fixed category.
       laborCategory: "preconstruction",
+      // Optional hours-source PDF (BT Daily Log for Mark, email for
+      // Michael). Empty until the user uploads one.
+      laborSource: "", laborEntries: [], laborBasis: "",
+      laborSourceOk: false,
       rawText: [], showRaw: false, pageCount: 0,
       detected: { value: 0, basis: "manual" }, note: null,
     }]);
@@ -1447,11 +1697,11 @@ export default function App() {
               ))}
               {subs.some((s) => s.kind === "manual" ||
                                   s.kind === "gcfee" ||
-                                  s.kind === "labor") && (
+                                  (s.kind === "labor" && !s.laborSource)) && (
                 <div style={{ marginTop: 4, fontStyle: "italic",
                   color: T.cream400 }}>
-                  Manual, GC Fee, and Trilogy Labor lines have no
-                  backup page.
+                  Manual, GC Fee, and Trilogy Labor lines without an
+                  uploaded source PDF have no backup page.
                 </div>
               )}
             </div>
