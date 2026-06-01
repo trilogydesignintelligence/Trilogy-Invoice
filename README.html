@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PMM Construct — README</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream-50:#FDFAF5; --cream-100:#F5F0E5; --cream-200:#EDE5D5;
+  --cream-300:#D8CAAA; --cream-400:#C4B088;
+  --burg-900:#3A0C08; --burg-800:#5A1A10; --burg-700:#7A2818;
+  --burg-600:#9A3820; --burg-500:#B84830; --burg-100:#F5E8E5;
+  --gold-900:#5A3408; --gold-700:#8B6020; --gold-500:#C8922A;
+  --gold-400:#D8A840; --gold-300:#E8C870; --gold-100:#FBF3DC;
+  --font-display:'Cormorant Garamond', Georgia, serif;
+  --font-body:'Libre Baskerville', Georgia, serif;
+  --font-ui:'Barlow Condensed', sans-serif;
+  --font-body-sm:'Barlow', sans-serif;
+  --font-mono:'DM Mono', monospace;
+  --shadow-sm:0 1px 3px rgba(90,26,16,0.08),0 1px 2px rgba(90,26,16,0.05);
+  --shadow-md:0 4px 12px rgba(90,26,16,0.10),0 2px 4px rgba(90,26,16,0.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--cream-50);color:var(--burg-900);line-height:1.7;font-size:15px}
+.page{max-width:980px;margin:0 auto;padding:48px 28px 80px}
+
+.masthead{border-bottom:2px solid var(--burg-700);padding-bottom:24px;margin-bottom:40px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:14px}
+.brand-mark{width:48px;height:48px;border-radius:50%;background:var(--burg-700);color:var(--gold-300);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:24px}
+.brand-name{font-family:var(--font-ui);font-size:1.5rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--burg-800);line-height:1}
+.brand-sub{font-family:var(--font-mono);font-size:.65rem;color:var(--gold-700);letter-spacing:.14em;text-transform:uppercase;margin-top:4px}
+.doc-title{font-family:var(--font-display);font-style:italic;font-size:1.1rem;color:var(--cream-400);letter-spacing:.04em}
+
+h1{font-family:var(--font-display);font-size:2.6rem;font-weight:600;color:var(--burg-800);line-height:1.15;letter-spacing:-.01em;margin:0 0 12px}
+h2{font-family:var(--font-display);font-size:1.7rem;font-weight:500;color:var(--burg-800);margin:36px 0 14px;line-height:1.2}
+h3{font-family:var(--font-ui);font-size:.95rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--burg-800);margin:28px 0 12px}
+
+.section-title{font-family:var(--font-ui);font-size:.72rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-500);border-bottom:1px solid var(--cream-300);padding-bottom:8px;margin:48px 0 24px}
+
+p{margin:0 0 16px;color:var(--burg-900)}
+.lead{font-family:var(--font-display);font-size:1.3rem;font-style:italic;color:var(--burg-700);margin-bottom:32px;line-height:1.5}
+
+a{color:var(--burg-700);text-decoration:underline;text-decoration-color:var(--gold-400);text-underline-offset:3px}
+a:hover{color:var(--burg-600)}
+
+code,.code{font-family:var(--font-mono);font-size:.82rem;background:var(--cream-100);border:1px solid var(--cream-300);border-radius:3px;padding:1px 6px;color:var(--burg-700)}
+pre{background:var(--burg-900);color:var(--cream-200);padding:18px 22px;border-radius:6px;font-family:var(--font-mono);font-size:.78rem;line-height:1.7;overflow-x:auto;margin:16px 0;box-shadow:var(--shadow-sm)}
+pre code{background:none;border:none;color:inherit;padding:0}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem;box-shadow:var(--shadow-sm);border-radius:6px;overflow:hidden}
+thead tr{background:var(--burg-700);color:var(--cream-50)}
+th{font-family:var(--font-mono);font-size:.65rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:10px 14px}
+td{padding:11px 14px;border-bottom:1px solid var(--cream-200);background:var(--cream-50);vertical-align:top;font-family:var(--font-body-sm)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even) td{background:var(--cream-100)}
+
+.card{background:var(--cream-100);border:1px solid var(--cream-300);border-radius:6px;overflow:hidden;box-shadow:var(--shadow-sm);margin:20px 0}
+.card-head{background:var(--cream-200);padding:14px 22px;border-bottom:1px solid var(--cream-300)}
+.card-head-title{font-family:var(--font-ui);font-size:.82rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--burg-800)}
+.card-body{padding:22px 24px}
+
+.badge{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:.62rem;font-weight:500;letter-spacing:.08em;padding:2px 9px;border-radius:20px;text-transform:uppercase}
+.badge-burg{background:var(--burg-100);color:var(--burg-700);border:1px solid var(--burg-500)}
+.badge-gold{background:var(--gold-100);color:var(--gold-900);border:1px solid var(--gold-400)}
+
+.status-info{background:#E8EFF8;border:1px solid #90A8D0;color:#1A3A5E;padding:14px 18px;border-radius:6px;font-family:var(--font-body-sm);font-size:.86rem;margin:18px 0;line-height:1.6}
+.status-warn{background:#FBF3DC;border:1px solid var(--gold-400);color:#6B4A08;padding:14px 18px;border-radius:6px;font-family:var(--font-body-sm);font-size:.86rem;margin:18px 0;line-height:1.6}
+
+ul,ol{padding-left:22px;margin:0 0 16px}
+li{margin:6px 0}
+
+.ascii-diagram{background:var(--cream-100);border:1px dashed var(--cream-300);border-radius:6px;padding:18px 22px;font-family:var(--font-mono);font-size:.72rem;line-height:1.6;color:var(--burg-800);white-space:pre;overflow-x:auto;margin:18px 0}
+
+.footer{border-top:1px solid var(--cream-300);padding-top:24px;margin-top:60px;display:flex;justify-content:space-between;align-items:baseline;gap:24px}
+.tagline{font-family:var(--font-display);font-style:italic;font-size:1.1rem;color:var(--gold-700)}
+.footer-meta{font-family:var(--font-mono);font-size:.62rem;color:var(--cream-400);letter-spacing:.1em;text-transform:uppercase;text-align:right}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="masthead">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    <div>
+      <div class="brand-name">PMM Construct</div>
+      <div class="brand-sub">Invoice Management · PMM Tools Suite</div>
+    </div>
+  </div>
+  <div class="doc-title">README · v1.0</div>
+</div>
+
+<h1>PMM Construct</h1>
+<p class="lead">Invoice management for Trilogy — part of the PMM Tools Suite.</p>
+
+<p>PMM Construct turns the manual process of building a Trilogy invoice in Word into a guided workflow: answer a short questionnaire, upload the subcontractor invoices, and get back a finished, branded invoice — with the supporting documents assembled into one packet.</p>
+
+<p>This repository holds the working prototype, the supporting tools, and the design spec.</p>
+
+<div class="section-title">Repository Contents</div>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>What it is</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>PMM_Construct_Spec.html</code></td><td>The design spec — questionnaire flow, what is configuration vs. a question, the extraction approach, and the build phasing. Start here.</td></tr>
+    <tr><td><code>pmm-construct-prototype.jsx</code></td><td>The interactive prototype (React). Walks the full questionnaire, parses real PDFs, generates a branded invoice PDF, and shows a live preview.</td></tr>
+    <tr><td><code>eagle_light_font.js</code></td><td>Eagle Light font (base64 TTF) used by both the on-screen UI and the generated PDF.</td></tr>
+    <tr><td><code>logos.js</code></td><td>Trilogy Partners and DesignWorks logos used on the generated PDF.</td></tr>
+    <tr><td><code>assemble_packet.py</code></td><td>Packet assembler. Merges a Trilogy invoice with its subcontractor invoice PDFs into one document, with an index page and stamped backup pages.</td></tr>
+    <tr><td><code>ocr_sub_invoice.py</code></td><td>OCR tool. Reads scanned or photographed subcontractor invoices using Tesseract.</td></tr>
+    <tr><td><code>Trilogy_DesignWorks_Invoice_Fillable.pdf</code></td><td>Fillable PDF invoice — Trilogy DesignWorks. Auto-calculating 20% Admin &amp; Supervision fee.</td></tr>
+    <tr><td><code>Trilogy_Partners_Invoice_Fillable.pdf</code></td><td>Fillable PDF invoice — Trilogy Partners. Plain line rows; GC Fee enters as a line item.</td></tr>
+    <tr><td><code>requirements.txt</code></td><td>Python dependencies for the backend tools.</td></tr>
+    <tr><td><code>site/</code></td><td>Minimal Vite app that wraps the prototype so it can be built into a live web page.</td></tr>
+    <tr><td><code>.github/workflows/deploy.yml</code></td><td>GitHub Actions workflow — builds the prototype and publishes it to GitHub Pages on every push to <code>main</code>.</td></tr>
+  </tbody>
+</table>
+
+<div class="section-title">The Two Invoices</div>
+
+<p>PMM Construct produces two invoice types, and they behave differently:</p>
+
+<table>
+  <thead>
+    <tr><th>Aspect</th><th>Trilogy DesignWorks</th><th>Trilogy Partners</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Numbered by</td><td>Invoice #</td><td>Draw #</td></tr>
+    <tr><td>Fee</td><td><span class="badge badge-burg">Auto 20%</span> Admin &amp; Supervision</td><td><span class="badge badge-gold">No calc</span> GC Fee as line item</td></tr>
+    <tr><td>Line items</td><td>Entered manually</td><td>One line per uploaded sub invoice</td></tr>
+    <tr><td>Output</td><td>Single-page invoice</td><td>Invoice + index + appended sub invoices</td></tr>
+  </tbody>
+</table>
+
+<p>The DesignWorks fee is calculated from this invoice's line items. The Partners "GC Fee" is computed from <em>all</em> project invoices, so it cannot be derived from this one alone — it enters as a normal line item with structured reference fields (month, year, %, base $) that assemble the description; the amount is the product of % &times; base $, auto-calculated.</p>
+
+<div class="section-title">How the Pieces Fit</div>
+
+<div class="ascii-diagram">                    ┌──────────────────────────┐
+                    │   Questionnaire           │
+                    │   (the prototype .jsx)    │
+                    └────────────┬──────────────┘
+                                 │
+              uploaded sub invoice PDFs / photos
+                                 │
+            ┌────────────────────┼────────────────────┐
+            │                    │                    │
+      text-based PDF        scanned PDF /         no document
+      → pdf.js in the       photo → OCR           → typed manually
+        prototype           (ocr_sub_invoice.py)
+            │                    │                    │
+            └────────────────────┼────────────────────┘
+                                 │
+                    one editable line per sub invoice
+                    (vendor + purpose, detected total)
+                                 │
+                    ┌────────────┴──────────────┐
+                    │   Generate the packet      │
+                    │   (assemble_packet.py)     │
+                    └────────────┬──────────────┘
+                                 │
+              Trilogy invoice + index page + stamped subs</div>
+
+<p>Extraction has three paths — typed, parsed, OCR'd — and all three feed the same one-line-per-sub review. Every extracted value is editable and carries a confidence flag; nothing is ever auto-finalized.</p>
+
+<div class="section-title">Running the Tools</div>
+
+<div class="card">
+  <div class="card-head"><div class="card-head-title">Prototype</div></div>
+  <div class="card-body">
+    <p>A React component. The <code>site/</code> folder is a minimal Vite app that wraps it.</p>
+    <pre><code>cd site
+cp ../pmm-construct-prototype.jsx src/
+cp ../eagle_light_font.js src/
+cp ../logos.js src/
+npm install
+npm run dev</code></pre>
+    <p>For deployment, the GitHub Actions workflow stages those files automatically on every push to <code>main</code>.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><div class="card-head-title">Packet Assembler</div></div>
+  <div class="card-body">
+    <pre><code>pip install -r requirements.txt
+python assemble_packet.py manifest.json output_packet.pdf</code></pre>
+    <p>The manifest lists the invoice PDF and sub invoices in line order. Output: invoice page, index/contents page, then every sub invoice appended in line-item order with a stamp identifying its line and vendor.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><div class="card-head-title">OCR Tool</div></div>
+  <div class="card-body">
+    <pre><code># Requires the Tesseract binary:
+#   Ubuntu/Debian:  sudo apt-get install tesseract-ocr
+#   macOS:          brew install tesseract
+pip install -r requirements.txt
+python ocr_sub_invoice.py scanned_invoice.png result.json</code></pre>
+    <p>Outputs the vendor and total recovered from the image, plus the raw OCR text, in the same shape the prototype's review step consumes. Always flagged low-confidence — OCR is a head start, not a final answer.</p>
+  </div>
+</div>
+
+<div class="section-title">Live Prototype Demo</div>
+
+<p>The prototype is published to GitHub Pages automatically. The <code>site/</code> folder is a small Vite app that wraps <code>pmm-construct-prototype.jsx</code>, and <code>.github/workflows/deploy.yml</code> builds and deploys it on every push to <code>main</code>.</p>
+
+<div class="status-info"><strong>One-time setup:</strong> in the repo, go to <strong>Settings → Pages → Build and deployment → Source</strong> and select <strong>GitHub Actions</strong>. After the next push (or a manual run from the <strong>Actions</strong> tab), the prototype is live at <code>https://&lt;your-username&gt;.github.io/&lt;repo-name&gt;/</code>.</div>
+
+<h3>What GitHub Pages can and cannot host</h3>
+<p>GitHub Pages serves static files only — it does not run Python.</p>
+<ul>
+  <li>The prototype demo, the spec, this README, and the fillable PDFs are all served fine.</li>
+  <li>The two Python tools (<code>assemble_packet.py</code>, <code>ocr_sub_invoice.py</code>) cannot run on Pages. They are backend tools — in the real PMM Construct app they run server-side, where OCR is faster and the PDF merge has the file access it needs.</li>
+</ul>
+
+<p>This repo is the home for the code and documentation; Pages hosts the live prototype demo; and the Python tools run wherever PMM Construct's backend lives.</p>
+
+<div class="section-title">Honest Status</div>
+
+<div class="status-warn"><strong>This is a prototype plus working tools, not a finished product.</strong></div>
+
+<p><strong>Works now:</strong> the questionnaire flow, real PDF text extraction, real OCR, the packet assembler, the brand-correct generated invoice PDF, both fillable PDFs.</p>
+
+<p><strong>Extraction is assistive, not automatic.</strong> Heuristics guess the vendor and total; OCR results are always low-confidence. The review step and the raw-text panels exist because a person must confirm every figure. This is by design — it is a head start, not an answer.</p>
+
+<p><strong>Not built yet:</strong> integrating the three extraction paths behind one upload step in a deployed app, draft persistence, and running extraction server-side. That is the production engineering step.</p>
+
+<p>See <a href="PMM_Construct_Spec.html">PMM_Construct_Spec.html</a> § 6 for the full build phasing.</p>
+
+<div class="footer">
+  <div class="tagline">Boots on the Ground, Eyes on the Sky.</div>
+  <div class="footer-meta">PMM Construct · Trilogy Design Intelligence<br>Part of the PMM Tools Suite: Inspector · Connection · Horizon · in the Sky · Bridge · Relay · on the Ground · Compass</div>
+</div>
+
+</div>
+</body>
+</html>

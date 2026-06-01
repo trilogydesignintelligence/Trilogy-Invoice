@@ -1,0 +1,77 @@
+# Builds the PMM Construct prototype and deploys it to GitHub Pages.
+#
+# Triggers on every push to the main branch. The prototype source
+# (pmm-construct-prototype.jsx) is copied into the Vite app's src/
+# folder, built into static files, and published to Pages.
+#
+# After the first successful run, the site is live at:
+#   https://<your-username>.github.io/<repo-name>/
+#
+# One-time setup in the repo: Settings -> Pages -> Build and
+# deployment -> Source -> "GitHub Actions".
+
+name: Deploy prototype to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # also allows a manual run from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time; a newer push supersedes an older run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Stage the prototype into the Vite app
+        # The prototype and its font module live at the repo root; the
+        # Vite app expects them inside site/src/. Create the directory
+        # first so the copy never fails on a fresh checkout (Git does
+        # not track empty folders, and the website uploader can drop
+        # folder paths).
+        run: |
+          mkdir -p site/src
+          cp pmm-construct-prototype.jsx site/src/pmm-construct-prototype.jsx
+          cp eagle_light_font.js site/src/eagle_light_font.js
+          cp logos.js site/src/logos.js
+          ls -la site/src
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm install
+
+      - name: Build the static site
+        working-directory: site
+        run: npm run build
+
+      - name: Upload the build as a Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

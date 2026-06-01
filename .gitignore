@@ -1,0 +1,36 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ---- Node / React (if the prototype gets a build setup) ----
+node_modules/
+dist/
+build/
+.npm/
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---- PMM Construct working files ----
+# Generated packets and OCR output — these are produced by the tools,
+# not source. Keep them out of version control.
+output_packet.pdf
+*_packet.pdf
+ocr_result.json
+result.json
+
+# Uploaded subcontractor invoices are client data — never commit them.
+subs/
+uploads/
+
+# Keep the sample/test files that ARE meant to be in the repo by
+# listing them as exceptions if you add any later, e.g.:
+# !samples/example_sub_invoice.pdf

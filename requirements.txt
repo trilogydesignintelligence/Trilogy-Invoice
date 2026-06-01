@@ -1,0 +1,18 @@
+# PMM Construct — Python dependencies
+# Install with:  pip install -r requirements.txt
+#
+# These cover the two backend tools:
+#   assemble_packet.py   needs pypdf, reportlab
+#   ocr_sub_invoice.py   needs pytesseract, Pillow, pypdfium2
+#
+# ocr_sub_invoice.py ALSO needs the Tesseract binary, which is NOT a
+# pip package — install it separately:
+#   Ubuntu/Debian:  sudo apt-get install tesseract-ocr
+#   macOS:          brew install tesseract
+#   Windows:        https://github.com/UB-Mannheim/tesseract/wiki
+
+pypdf>=5.0
+reportlab>=4.0
+pytesseract>=0.3.10
+Pillow>=10.0
+pypdfium2>=4.0

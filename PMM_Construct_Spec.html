@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PMM Construct — Questionnaire Specification</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream-50:#FDFAF5; --cream-100:#F5F0E5; --cream-200:#EDE5D5;
+  --cream-300:#D8CAAA; --cream-400:#C4B088;
+  --burg-900:#3A0C08; --burg-800:#5A1A10; --burg-700:#7A2818;
+  --burg-600:#9A3820; --burg-500:#B84830; --burg-100:#F5E8E5;
+  --gold-900:#5A3408; --gold-700:#8B6020; --gold-500:#C8922A;
+  --gold-400:#D8A840; --gold-300:#E8C870; --gold-100:#FBF3DC;
+  --font-display:'Cormorant Garamond', Georgia, serif;
+  --font-body:'Libre Baskerville', Georgia, serif;
+  --font-ui:'Barlow Condensed', sans-serif;
+  --font-body-sm:'Barlow', sans-serif;
+  --font-mono:'DM Mono', monospace;
+  --shadow-sm:0 1px 3px rgba(90,26,16,0.08),0 1px 2px rgba(90,26,16,0.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-body);background:var(--cream-50);color:var(--burg-900);line-height:1.75;font-size:15px}
+.page{max-width:880px;margin:0 auto;padding:48px 28px 80px}
+
+.masthead{border-bottom:2px solid var(--burg-700);padding-bottom:24px;margin-bottom:40px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:14px}
+.brand-mark{width:48px;height:48px;border-radius:50%;background:var(--burg-700);color:var(--gold-300);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:24px}
+.brand-name{font-family:var(--font-ui);font-size:1.5rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--burg-800);line-height:1}
+.brand-sub{font-family:var(--font-mono);font-size:.65rem;color:var(--gold-700);letter-spacing:.14em;text-transform:uppercase;margin-top:4px}
+.doc-title{font-family:var(--font-display);font-style:italic;font-size:1.1rem;color:var(--cream-400);letter-spacing:.04em}
+
+h1{font-family:var(--font-display);font-size:2.4rem;font-weight:600;color:var(--burg-800);line-height:1.15;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-family:var(--font-display);font-size:1.6rem;font-weight:500;color:var(--burg-800);margin:42px 0 14px;line-height:1.2;border-bottom:1px solid var(--cream-300);padding-bottom:8px}
+h3{font-family:var(--font-display);font-size:1.25rem;font-style:italic;color:var(--burg-700);margin:30px 0 10px;line-height:1.25}
+
+.lead{font-family:var(--font-display);font-size:1.2rem;font-style:italic;color:var(--burg-700);margin-bottom:36px;line-height:1.5}
+.section-tag{font-family:var(--font-ui);font-size:.7rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-500);margin:48px 0 8px}
+
+p{margin:0 0 14px}
+ol,ul{padding-left:22px;margin:0 0 18px}
+li{margin:6px 0}
+
+a{color:var(--burg-700);text-decoration:underline;text-decoration-color:var(--gold-400);text-underline-offset:3px}
+strong{color:var(--burg-900)}
+em{color:var(--burg-700)}
+code{font-family:var(--font-mono);font-size:.82rem;background:var(--cream-100);border:1px solid var(--cream-300);border-radius:3px;padding:1px 6px;color:var(--burg-700)}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.86rem;box-shadow:var(--shadow-sm);border-radius:6px;overflow:hidden}
+thead tr{background:var(--burg-700);color:var(--cream-50)}
+th{font-family:var(--font-mono);font-size:.65rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding:10px 14px}
+td{padding:11px 14px;border-bottom:1px solid var(--cream-200);background:var(--cream-50);vertical-align:top;font-family:var(--font-body-sm);line-height:1.6}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even) td{background:var(--cream-100)}
+
+blockquote{margin:14px 0;padding:14px 20px;background:var(--cream-100);border-left:3px solid var(--gold-500);border-radius:0 4px 4px 0;font-family:var(--font-body);font-style:italic;color:var(--burg-800);line-height:1.65}
+blockquote strong{font-family:var(--font-ui);font-size:.95rem;letter-spacing:.04em;text-transform:uppercase;color:var(--burg-700);font-weight:700;display:block;margin-bottom:6px;font-style:normal}
+
+.callout{padding:16px 20px;border-radius:6px;margin:18px 0;font-family:var(--font-body-sm);font-size:.92rem;line-height:1.65}
+.callout-warn{background:#FBF3DC;border:1px solid var(--gold-400);color:#6B4A08}
+.callout-info{background:#E8EFF8;border:1px solid #90A8D0;color:#1A3A5E}
+
+.footer{border-top:1px solid var(--cream-300);padding-top:24px;margin-top:60px;display:flex;justify-content:space-between;align-items:baseline;gap:24px}
+.tagline{font-family:var(--font-display);font-style:italic;font-size:1.1rem;color:var(--gold-700)}
+.footer-meta{font-family:var(--font-mono);font-size:.62rem;color:var(--cream-400);letter-spacing:.1em;text-transform:uppercase;text-align:right}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="masthead">
+  <div class="brand">
+    <div class="brand-mark">C</div>
+    <div>
+      <div class="brand-name">PMM Construct</div>
+      <div class="brand-sub">Invoice Management · PMM Tools Suite</div>
+    </div>
+  </div>
+  <div class="doc-title">Questionnaire Specification · v1.0</div>
+</div>
+
+<h1>Invoice Questionnaire</h1>
+<p class="lead">Design spec for the guided intake that produces a finished Trilogy invoice with minimal manual entry.</p>
+
+<div class="section-tag">§ 1 — Purpose</div>
+<p>PMM Construct replaces the manual process of building a Trilogy invoice in Word. Instead of typing every line item by hand, the user answers a short guided questionnaire and — for the Trilogy Partners invoice — uploads the subcontractor invoices for the draw. Construct extracts the data, builds the line items, applies the standing fee, and outputs the finished invoice.</p>
+
+<p>Two invoice types are supported, and they behave differently:</p>
+
+<table>
+  <thead>
+    <tr><th>Invoice type</th><th>Fee</th><th>Numbered by</th><th>Source of line items</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Trilogy DesignWorks</td>
+      <td>Trilogy DesignWorks Administration and Supervision — <strong>20%</strong>, auto-calculated from this invoice</td>
+      <td>Invoice #</td>
+      <td>Entered manually</td>
+    </tr>
+    <tr>
+      <td>Trilogy Partners</td>
+      <td><strong>No calculated fee on the invoice.</strong> The GC Fee is a line item; amount = % × base $</td>
+      <td>Draw #</td>
+      <td>Uploaded subcontractor invoices</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-tag">§ 2 — Design Principles</div>
+<ol>
+  <li><strong>One question per screen, with sensible defaults.</strong> The user should be able to tab through quickly. Anything that can be pre-filled, is.</li>
+  <li><strong>Never ask twice.</strong> Company address, fee rates, and remittance details are constants — they are configuration, not questions.</li>
+  <li><strong>Upload-first for Partners draws.</strong> The fastest path is "drop the sub invoices in," not "type each line." Typing is the fallback, not the norm.</li>
+  <li><strong>Every extracted value is reviewable and editable.</strong> OCR and PDF parsing are never trusted blindly. The user confirms before the invoice is final.</li>
+  <li><strong>The math is never the user's job.</strong> Line totals, the fee, the GC Fee amount, and the balance are always computed.</li>
+</ol>
+
+<div class="section-tag">§ 3 — Questionnaire Flow</div>
+
+<h3>Step 0 — Invoice type</h3>
+<blockquote><strong>Which invoice are you creating?</strong>
+( ) Trilogy DesignWorks &nbsp;&nbsp;( ) Trilogy Partners</blockquote>
+<p>This single choice branches everything downstream: which logo, which fee label and rate, whether the number field is "Invoice #" or "Draw #", and whether the upload step appears.</p>
+
+<h3>Step 1 — Client / project</h3>
+<blockquote><strong>Who is this billed to?</strong>
+Client or project name → fills the Bill To field.</blockquote>
+
+<h3>Step 2 — Invoice / Draw number</h3>
+<blockquote><strong>What is the invoice number?</strong> (DesignWorks) <em>or</em> <strong>Which draw is this?</strong> (Partners)</blockquote>
+
+<h3>Step 3 — Date</h3>
+<blockquote><strong>Invoice date?</strong>
+Defaults to today; user can change.</blockquote>
+
+<h3>Step 4 — Line items</h3>
+
+<p><strong>DesignWorks path — manual entry:</strong></p>
+<blockquote><strong>Add the line items.</strong>
+Quantity, Description, Rate. Amount auto-fills as Qty × Rate; user can type it directly on rows where Rate isn't a true unit price.</blockquote>
+
+<p><strong>Partners path — upload to populate:</strong></p>
+<blockquote><strong>Upload the subcontractor invoices for this draw.</strong>
+Drag-and-drop zone. Accepts PDF and image/scan (JPG, PNG, HEIC). Whatever a sub sends arrives as a PDF or a photo and is uploaded the same way.</blockquote>
+
+<p><strong>Each uploaded sub invoice becomes ONE line on the Trilogy invoice</strong> — matching how the real Trilogy Partners invoice bills (one line per sub, e.g. "Timberline Porta Potty — November"). Construct does NOT re-type the sub's own itemization onto the Trilogy invoice; instead the original sub PDF is kept and appended to the final packet as backup (see Step 6).</p>
+
+<p>For each uploaded PDF, Construct extracts and presents for review:</p>
+<ul>
+  <li><strong>Description</strong> — vendor name + purpose, pre-filled, fully editable</li>
+  <li><strong>Amount</strong> — the detected invoice total, editable</li>
+  <li><strong>Source confidence</strong> — high for a clean text-based PDF, low for a photo or scan that needs OCR</li>
+</ul>
+
+<p>Total detection uses <strong>labeled-total-first</strong> (scan for "Balance Due", "Total", "Amount Due"), falling back to the <strong>largest dollar amount</strong> if no labeled total is found. A collapsible <strong>raw extracted text</strong> panel on each row lets the user verify a low-confidence guess.</p>
+
+<p>The user reviews each row, corrects anything wrong, and can add:</p>
+<ul>
+  <li>A <strong>manual line</strong> for items with no document (e.g. "Supervision Fee November").</li>
+  <li>A <strong>GC Fee line</strong> — a special manual line with four structured reference fields (month, year, %, base $) that assemble the description. The amount auto-calculates as % × base $.</li>
+</ul>
+
+<h3>Step 5 — Fee</h3>
+
+<p>The two invoices handle the fee in fundamentally different ways.</p>
+
+<p><strong>DesignWorks — calculated fee step.</strong> "Trilogy DesignWorks Administration and Supervision" at <strong>20%</strong>. This <em>is</em> a percentage of the invoice being created, so Construct calculates it: the user supplies the fee <strong>base</strong> (and can fill it with the line-item total in one click), and Fee = base × 20%. DesignWorks has a dedicated Fee step.</p>
+
+<p><strong>Partners — no separate Fee step.</strong> Trilogy Partners has no separate fee step in the questionnaire. The "GC Fee" is a line item, added from the upload step like any other line ("+ Add GC Fee line"). It carries four structured reference fields — <strong>month, year, percentage, base $</strong> — which assemble the description in this exact format:</p>
+
+<blockquote>GC Fee for the period September 2025 14% of $73954.76</blockquote>
+
+<p>The <strong>fee amount auto-calculates as percentage × base $</strong>. Because this matches how the real invoice is computed (the % and base $ values published in the description are the source of the amount), Construct does the math automatically and the GC Fee line sums into the Balance Due like any other line item.</p>
+
+<h3>Step 6 — Review &amp; generate the packet</h3>
+<blockquote><strong>Here's your invoice. Anything to fix?</strong>
+Full preview: header, every line item, fee row (if any), and the auto-summed Balance Due. Edit-in-place on any field.</blockquote>
+
+<p>For a <strong>Trilogy Partners</strong> draw, "Generate" produces an <strong>invoice packet</strong>, not a single page:</p>
+
+<ol>
+  <li>The Trilogy Partners invoice page.</li>
+  <li>An <strong>index / divider page</strong> listing every sub invoice in the packet — line number, vendor, source filename, and the packet page it starts on — so it works as a table of contents for the backup.</li>
+  <li>Every uploaded subcontractor invoice PDF, appended behind the index in <strong>invoice line-item order</strong> so a reviewer can move line-by-line to the matching backup.</li>
+  <li>Each appended sub page is lightly <strong>stamped</strong> in the top margin with its line number and vendor (e.g. "Line 3 — Timberline Porta Potty"), and the whole packet carries a footer page number so the index's page references stay accurate. The stamp is an overlay; the sub's original document content is never modified.</li>
+  <li>Manual lines and GC Fee lines have no backup page and are not listed on the index.</li>
+</ol>
+
+<p>A <strong>Trilogy DesignWorks</strong> invoice generates as a single page — it has no uploaded sub invoices to append.</p>
+
+<div class="callout callout-info">Packet assembly is a server-side step (<code>assemble_packet.py</code>); a browser-only tool cannot merge real PDF files. The prototype's "Generate" button produces the invoice page; in production this is one step in the full packet workflow.</div>
+
+<div class="section-tag">§ 4 — Configuration, not Questions</div>
+<p>These are set once in PMM Construct settings and never asked:</p>
+<ul>
+  <li>Company addresses, phone, email, websites (both entities)</li>
+  <li>Logos (both entities)</li>
+  <li>Standing fee: DesignWorks 20% (Partners has no calculated fee)</li>
+  <li>DesignWorks fee label: "Trilogy DesignWorks Administration and Supervision"</li>
+  <li>Default table layout (11 line rows + fee row + balance)</li>
+  <li>Packet assembly rules: invoice first, index page, subs in line order, stamped</li>
+</ul>
+
+<div class="section-tag">§ 5 — Extraction Scope</div>
+<p>The Partners upload step relies on extracting two things from each sub invoice: <strong>vendor name</strong> and <strong>total amount</strong>. Both are heuristic; both are reviewable.</p>
+
+<p><strong>Vendor name:</strong> the first non-empty line of the document that isn't a dollar amount and isn't the word "Invoice." Falls back to the filename, cleaned up.</p>
+
+<p><strong>Total amount:</strong> labeled-total-first ("Balance Due," "Total," "Amount Due"), falling back to the largest dollar amount on the page. The chosen basis is shown to the user so they can sanity-check.</p>
+
+<p><strong>Confidence levels:</strong></p>
+<ul>
+  <li><strong>High</strong> — text-based PDF with a clearly labeled total ("Balance Due: $247.12").</li>
+  <li><strong>Review</strong> — text-based PDF with no labeled total; largest-amount fallback was used.</li>
+  <li><strong>Low — please check</strong> — OCR result, no text layer, or unparseable. The user must verify.</li>
+</ul>
+
+<p>Every row exposes a collapsible "raw extracted text" panel so a low-confidence guess can be checked against what was actually on the page.</p>
+
+<div class="section-tag">§ 6 — Build Phasing</div>
+
+<ol>
+  <li><strong>Phase A — Questionnaire + manual entry + PDF output.</strong> <em>Built.</em> Proves the flow; already beats the Word process.</li>
+  <li><strong>Phase B — PDF text extraction.</strong> <em>Built.</em> Text-based sub invoices parsed with pdf.js; vendor + total extracted by heuristic.</li>
+  <li><strong>Phase C — OCR for scans and photos.</strong> <em>Built.</em> Scanned PDFs and photos run through Tesseract OCR (<code>ocr_sub_invoice.py</code>): image is pre-processed (grayscale, autocontrast, upscale, sharpen), text is recovered, and the same vendor/total heuristics from Phase B are applied. OCR results are <strong>always flagged low confidence</strong> — the tool produces a head start, never a final answer.</li>
+</ol>
+
+<p>Remaining work for the production app: wire the three extraction paths (manual / pdf.js / OCR) behind one upload step, persist drafts, and run extraction server-side so OCR is fast and the packet merge and OCR live alongside the questionnaire.</p>
+
+<div class="footer">
+  <div class="tagline">Boots on the Ground, Eyes on the Sky.</div>
+  <div class="footer-meta">PMM Construct Spec · v1.0<br>Trilogy Design Intelligence</div>
+</div>
+
+</div>
+</body>
+</html>
