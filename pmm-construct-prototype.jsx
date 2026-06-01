@@ -274,6 +274,73 @@ function gcFeeAmount(s) {
   return (pct / 100) * base;
 }
 
+/* ---- Trilogy Labor lines ----
+   Two standing line items appear on every Trilogy Partners draw:
+   Michael Rath's hours at a locked $175/hr (always "Design Modeling")
+   and Mark Miller's hours at a locked $125/hr (category varies per
+   invoice between Pre-Construction and Construction Trilogy Labor).
+   The user types hours; rate, description, and cost code are locked. */
+const LABOR_PEOPLE = {
+  rath: {
+    key: "rath",
+    fullName: "Michael Rath",
+    shortName: "Michael",
+    rate: 175,
+    fixedCategory: {
+      label: "Design Modeling",
+      costCode: "01000-03 Design Modeling",
+      descriptionTail: "hours for design modeling",
+    },
+  },
+  miller: {
+    key: "miller",
+    fullName: "Mark Miller",
+    shortName: "Mark",
+    rate: 125,
+    categories: {
+      preconstruction: {
+        label: "Pre-Construction Trilogy Labor",
+        costCode: "01000-05 Pre-Construction Trilogy Labor",
+        descriptionTail: "hours for pre-construction labor",
+      },
+      construction: {
+        label: "Construction Trilogy Labor",
+        costCode: "01000-05 Construction Trilogy Labor",
+        descriptionTail: "hours for construction labor",
+      },
+    },
+  },
+};
+
+// Look up the category for a labor row. For Rath, always the fixed
+// category. For Miller, the user-selected category (defaults to
+// preconstruction if unset).
+function laborCategory(s) {
+  const person = LABOR_PEOPLE[s.laborPerson];
+  if (!person) return null;
+  if (person.fixedCategory) return person.fixedCategory;
+  const key = s.laborCategory || "preconstruction";
+  return person.categories[key] || person.categories.preconstruction;
+}
+
+// Description as it appears on the invoice line item: e.g.
+// "Michael Rath hours for design modeling".
+function laborDescription(s) {
+  const person = LABOR_PEOPLE[s.laborPerson];
+  const cat = laborCategory(s);
+  if (!person || !cat) return "";
+  return `${person.fullName} ${cat.descriptionTail}`;
+}
+
+// Compute hours × rate. NaN if hours hasn't been entered yet.
+function laborAmount(s) {
+  const person = LABOR_PEOPLE[s.laborPerson];
+  if (!person) return NaN;
+  const hours = parseFloat(String(s.laborHours || "").replace(/[, ]/g, ""));
+  if (isNaN(hours)) return NaN;
+  return hours * person.rate;
+}
+
 /* ============================================================
    PDF GENERATION  —  design-system-correct invoice output
    ============================================================ */
@@ -554,6 +621,122 @@ function SubRow({ s, updateSub, removeSub }) {
     );
   }
 
+  /* Labor row: locked rate, user types hours. For Mark Miller, the
+     category (Pre-Construction vs. Construction) is also user-selected. */
+  if (s.kind === "labor") {
+    const person = LABOR_PEOPLE[s.laborPerson];
+    const cat = laborCategory(s);
+    const calcAmt = laborAmount(s);
+    const isMiller = s.laborPerson === "miller";
+    return (
+      <div style={{
+        border: `1px solid ${T.burg500}`,
+        background: T.burg100,
+        borderRadius: 6, padding: "14px 16px",
+        boxShadow: T.shadowSm,
+      }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          alignItems: "baseline", marginBottom: 12,
+        }}>
+          <span style={{
+            fontFamily: FONT.mono, fontSize: 10,
+            letterSpacing: ".14em", textTransform: "uppercase",
+            color: T.burg700, fontWeight: 500,
+          }}>
+            {person ? `${person.fullName} — Trilogy Labor` : "Labor"}
+          </span>
+          <button onClick={() => removeSub(s.id)} style={{
+            border: "none", background: "none", cursor: "pointer",
+            color: T.burg500, fontSize: 18, lineHeight: 1, padding: 0,
+          }} aria-label="Remove">&times;</button>
+        </div>
+
+        {isMiller && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 10,
+              letterSpacing: ".1em", textTransform: "uppercase",
+              color: T.gold700, marginBottom: 5,
+            }}>Category for this invoice</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[
+                { key: "preconstruction", label: "Pre-Construction" },
+                { key: "construction", label: "Construction" },
+              ].map((opt) => {
+                const sel = (s.laborCategory || "preconstruction") === opt.key;
+                return (
+                  <button key={opt.key}
+                    onClick={() => updateSub(s.id,
+                      { laborCategory: opt.key })}
+                    style={{
+                      flex: 1, padding: "8px 10px",
+                      fontFamily: FONT.ui, fontSize: 11,
+                      fontWeight: 700, letterSpacing: ".06em",
+                      textTransform: "uppercase",
+                      background: sel ? T.burg700 : T.cream50,
+                      color: sel ? T.cream50 : T.burg700,
+                      border: `1.5px solid ${sel ? T.burg700 : T.cream300}`,
+                      borderRadius: 4, cursor: "pointer",
+                      boxShadow: sel ? T.shadowSm : "none",
+                    }}>{opt.label}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "100px 90px 1fr 140px", gap: 8,
+          alignItems: "center", marginBottom: 8,
+        }}>
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 10,
+            letterSpacing: ".1em", textTransform: "uppercase",
+            color: T.gold700,
+          }}>Hours</div>
+          <input style={{ ...inputStyle(), textAlign: "right",
+            fontFamily: FONT.display, fontSize: 15 }}
+            value={s.laborHours || ""}
+            placeholder="0"
+            onChange={(e) => updateSub(s.id,
+              { laborHours: e.target.value })} />
+          <div style={{
+            fontFamily: FONT.mono, fontSize: 11,
+            color: T.burg700, textAlign: "right",
+          }}>
+            &times; ${person ? person.rate : 0}/hr
+          </div>
+          <div style={{
+            ...inputStyle(),
+            background: isNaN(calcAmt) ? T.cream100 : T.cream50,
+            border: `1.5px solid ${isNaN(calcAmt) ? T.cream300 : T.burg500}`,
+            textAlign: "right",
+            color: isNaN(calcAmt) ? T.cream400 : T.burg900,
+            fontWeight: isNaN(calcAmt) ? 400 : 700,
+            fontFamily: FONT.display, fontSize: 15,
+          }}>
+            {isNaN(calcAmt) ? "—" : money(calcAmt)}
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: FONT.body, fontSize: 12, fontStyle: "italic",
+          color: T.burg800, lineHeight: 1.5, marginTop: 4,
+        }}>
+          {laborDescription(s)}
+        </div>
+        <div style={{
+          marginTop: 6, fontFamily: FONT.mono, fontSize: 10,
+          letterSpacing: ".06em", color: T.gold700,
+        }}>
+          {cat ? cat.costCode : ""}
+        </div>
+      </div>
+    );
+  }
+
   /* Standard sub-invoice row. */
   return (
     <div style={{
@@ -684,11 +867,16 @@ export default function App() {
         let amt;
         if (s.kind === "gcfee") {
           amt = gcFeeAmount(s);
+        } else if (s.kind === "labor") {
+          amt = laborAmount(s);
         } else {
           amt = parseFloat(s.amount);
           if (isNaN(amt) && !isNaN(q) && !isNaN(r)) amt = q * r;
         }
-        const desc = s.kind === "gcfee" ? gcFeeDescription(s) : s.desc;
+        let desc;
+        if (s.kind === "gcfee") desc = gcFeeDescription(s);
+        else if (s.kind === "labor") desc = laborDescription(s);
+        else desc = s.desc;
         return {
           qty: s.qty, desc, rate: s.rate,
           amount: isNaN(amt) ? 0 : amt, confidence: s.confidence,
@@ -781,6 +969,19 @@ export default function App() {
       id: nextId(), source: "GC Fee", kind: "gcfee",
       confidence: "high", qty: "1", rate: "", desc: "", amount: "",
       gcMonth: "", gcYear: "", gcPct: "", gcBase: "",
+      rawText: [], showRaw: false, pageCount: 0,
+      detected: { value: 0, basis: "manual" }, note: null,
+    }]);
+
+  const addLaborSub = (laborPerson) =>
+    setSubs((arr) => [...arr, {
+      id: nextId(), source: LABOR_PEOPLE[laborPerson].fullName,
+      kind: "labor", confidence: "high",
+      qty: "1", rate: "", desc: "", amount: "",
+      laborPerson,
+      laborHours: "",
+      // Only meaningful for Miller; Rath has a fixed category.
+      laborCategory: "preconstruction",
       rawText: [], showRaw: false, pageCount: 0,
       detected: { value: 0, basis: "manual" }, note: null,
     }]);
@@ -1111,6 +1312,14 @@ export default function App() {
             style={S.btn("secondary", false)}>
             + Add GC Fee line
           </button>
+          <button onClick={() => addLaborSub("rath")}
+            style={S.btn("secondary", false)}>
+            + Michael Rath hours
+          </button>
+          <button onClick={() => addLaborSub("miller")}
+            style={S.btn("secondary", false)}>
+            + Mark Miller hours
+          </button>
         </div>
       </>
     );
@@ -1237,10 +1446,12 @@ export default function App() {
                 </div>
               ))}
               {subs.some((s) => s.kind === "manual" ||
-                                  s.kind === "gcfee") && (
+                                  s.kind === "gcfee" ||
+                                  s.kind === "labor") && (
                 <div style={{ marginTop: 4, fontStyle: "italic",
                   color: T.cream400 }}>
-                  Manual / GC Fee lines have no backup page.
+                  Manual, GC Fee, and Trilogy Labor lines have no
+                  backup page.
                 </div>
               )}
             </div>
