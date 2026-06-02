@@ -1887,39 +1887,120 @@ export default function App() {
 
         {entity.uploadsItems && (
           <div style={{
-            marginTop: 22, padding: "16px 20px",
+            marginTop: 22, padding: "18px 22px",
             background: T.cream200,
             border: `1px solid ${T.cream300}`, borderRadius: 6,
           }}>
             <div style={{ fontFamily: FONT.mono, fontSize: 10.5,
               letterSpacing: ".12em", textTransform: "uppercase",
-              color: T.gold700, marginBottom: 8 }}>
-              Invoice Packet Plan
+              color: T.gold700, marginBottom: 4 }}>
+              Invoice Packet — what goes in it
+            </div>
+            <div style={{ fontFamily: FONT.bodySm, fontSize: 12,
+              color: T.cream400, fontStyle: "italic", marginBottom: 12,
+              lineHeight: 1.5 }}>
+              The finished packet is the invoice page plus every
+              subcontractor invoice stapled behind it as backup, in
+              this order:
             </div>
             <div style={{ fontFamily: FONT.bodySm, fontSize: 13,
               color: T.burg800, lineHeight: 1.7 }}>
-              <div>1. Trilogy Partners invoice page</div>
+              <div>1. Trilogy {entity.key === "partners"
+                ? "Partners" : "DesignWorks"} invoice page
+                <span style={{ color: T.cream400 }}> (the PDF you
+                download below)</span></div>
               {subs.filter((s) => s.pageCount > 0).map((s, i) => (
                 <div key={s.id}>
                   {i + 2}. {s.desc.replace(/\s*—\s*$/, "")
                     || "Sub invoice"} — {s.source}{" "}
-                  ({s.pageCount}p, stamped)
+                  <span style={{ color: T.cream400 }}>
+                    ({s.pageCount}p, stamped)</span>
                 </div>
               ))}
               {subs.some((s) => s.kind === "manual" ||
                                   s.kind === "gcfee" ||
                                   (s.kind === "labor" && !s.laborSource)) && (
-                <div style={{ marginTop: 4, fontStyle: "italic",
+                <div style={{ marginTop: 6, fontStyle: "italic",
                   color: T.cream400 }}>
                   Manual, GC Fee, and Trilogy Labor lines without an
-                  uploaded source PDF have no backup page.
+                  uploaded source PDF have no backup page — they don't
+                  appear in the list above.
                 </div>
               )}
             </div>
-            <div style={{ marginTop: 10, fontFamily: FONT.mono,
-              fontSize: 10, color: T.cream400, letterSpacing: ".06em" }}>
-              Packet stitching runs server-side (assemble_packet.py).
-              Generate below downloads the invoice page only.
+
+            {/* Step-by-step for assembling the packet with the
+                drag-and-drop app. */}
+            <div style={{
+              marginTop: 16, paddingTop: 14,
+              borderTop: `1px solid ${T.cream300}`,
+            }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5,
+                letterSpacing: ".12em", textTransform: "uppercase",
+                color: T.gold700, marginBottom: 10 }}>
+                How to build the packet
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 20,
+                fontFamily: FONT.bodySm, fontSize: 13,
+                color: T.burg800, lineHeight: 1.6 }}>
+                <li style={{ marginBottom: 8 }}>
+                  Click <strong>Generate invoice PDF</strong> below and
+                  save it.
+                </li>
+                <li style={{ marginBottom: 8 }}>
+                  Make a folder for this draw (the Desktop is fine).
+                  Put the invoice and each subcontractor PDF in it,
+                  named with a number in front so they sort in invoice
+                  order:
+                  <div style={{
+                    marginTop: 6, padding: "10px 12px",
+                    background: T.cream50,
+                    border: `1px solid ${T.cream300}`,
+                    borderRadius: 4, fontFamily: FONT.mono,
+                    fontSize: 11, color: T.burg800, lineHeight: 1.8,
+                  }}>
+                    <div>00_invoice.pdf</div>
+                    {subs.filter((s) => s.pageCount > 0).map((s, i) => {
+                      const slug = (s.desc.replace(/\s*—\s*$/, "")
+                        || "sub")
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, "_")
+                        .replace(/^_+|_+$/g, "")
+                        .slice(0, 28);
+                      const num = String(i + 1).padStart(2, "0");
+                      return (
+                        <div key={s.id}>{num}_{slug}.pdf</div>
+                      );
+                    })}
+                    {subs.filter((s) => s.pageCount > 0).length === 0 && (
+                      <div style={{ color: T.cream400 }}>
+                        01_first_sub.pdf, 02_second_sub.pdf, …
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 11.5,
+                    color: T.cream400, fontStyle: "italic" }}>
+                    A photo instead of a PDF? Open it in Preview →
+                    File → Export as PDF first.
+                  </div>
+                </li>
+                <li style={{ marginBottom: 8 }}>
+                  Drag the <strong>folder</strong> onto the{" "}
+                  <strong>PacketAssembler</strong> app icon.
+                </li>
+                <li>
+                  Click <strong>Open Folder</strong> in the message —
+                  your finished <strong>PACKET.pdf</strong> is inside,
+                  with a contents page and every sub stamped by line.
+                </li>
+              </ol>
+              <div style={{ marginTop: 10, fontFamily: FONT.bodySm,
+                fontSize: 11.5, color: T.cream400, fontStyle: "italic",
+                lineHeight: 1.5 }}>
+                First time on this Mac? See MAC_APP_SETUP.txt for the
+                one-time setup. The browser downloads the invoice page;
+                stapling the subs behind it happens in the app.
+              </div>
             </div>
           </div>
         )}
