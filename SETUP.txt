@@ -1,0 +1,117 @@
+PMM CONSTRUCT — PACKET ASSEMBLER
+Setup & use on your Mac
+========================================================
+
+WHAT THIS DOES
+   Merges your generated Trilogy invoice and the subcontractor
+   invoice PDFs into one finished packet — the thing you've been
+   assembling by hand in Preview. Drop files in a folder, run one
+   command, get PACKET.pdf.
+
+
+========================================================
+ONE-TIME SETUP  (about 5 minutes, you only do this once)
+========================================================
+
+STEP 1 — Open Terminal
+   Press Cmd+Space, type "Terminal", press Return.
+   A window with a text prompt opens. You'll type a few lines here.
+
+STEP 2 — Check you have Python 3
+   Type this and press Return:
+
+       python3 --version
+
+   If you see something like "Python 3.11.x", you're set — skip to
+   STEP 3.
+
+   If you see "command not found", install Python:
+   - Go to https://www.python.org/downloads/
+   - Download the macOS installer for the latest Python 3
+   - Run it, click through with the defaults
+   - Close and reopen Terminal, then try  python3 --version  again
+
+STEP 3 — Install the two libraries the script needs
+   Type this and press Return:
+
+       pip3 install pypdf reportlab
+
+   You'll see some text scroll by ending in "Successfully installed".
+   If pip3 isn't found, try:
+
+       python3 -m pip install pypdf reportlab
+
+   That's the whole setup. You won't need to do STEP 2 or 3 again.
+
+
+========================================================
+USING IT  (every time you make a packet)
+========================================================
+
+STEP 1 — Make a folder for the draw
+   Anywhere you like — the Desktop is easy. For example a folder
+   called "Draw6". Inside it, put your PDFs named like this:
+
+       00_invoice.pdf                 <- the Trilogy invoice
+       01_ferguson_bath.pdf           <- subs, numbered in the SAME
+       02_timberline_porta_potty.pdf     order they appear on the
+       03_lowes_shelf.pdf                invoice
+
+   The numbers control the order. The invoice should start with 00
+   (or just have the word "invoice" in its name).
+
+   Got a photo or screenshot instead of a PDF? Open it in Preview,
+   then File > Export... and choose PDF. Drop that in the folder.
+
+STEP 2 — Run the assembler
+   In Terminal, type  python3  then a space, then drag the
+   assemble_packet.py file into the Terminal window (its path appears
+   automatically), then a space, then drag your DRAW FOLDER into the
+   window. It ends up looking like:
+
+       python3 /path/to/assemble_packet.py /Users/you/Desktop/Draw6
+
+   Press Return.
+
+STEP 3 — Done
+   You'll see a summary, and  PACKET.pdf  appears inside your draw
+   folder. That's the finished packet — invoice, a contents page,
+   then every sub stamped with its line number and vendor.
+
+
+========================================================
+FIXING A VENDOR NAME ON THE CONTENTS PAGE
+========================================================
+   The script guesses vendor names from the filenames. After the
+   first run it leaves a file called  packet_labels.txt  in the
+   folder. If a name looks wrong:
+
+   1. Open packet_labels.txt (double-click — opens in TextEdit)
+   2. Each line looks like:
+          01_ferguson_bath.pdf  =  Ferguson Bath
+      Change only the text to the RIGHT of the "=" sign.
+   3. Save, and run the same command again.
+
+   Delete packet_labels.txt to go back to the auto-guessed names.
+
+
+========================================================
+TIP — make a re-usable shortcut (optional)
+========================================================
+   Tired of dragging the script in every time? In Terminal you can
+   make a shortcut. Type (once):
+
+       echo 'alias packet="python3 /FULL/PATH/TO/assemble_packet.py"' >> ~/.zshrc
+
+   (replace /FULL/PATH/TO/ with where you keep the script — drag the
+   file into Terminal to see its path). Close and reopen Terminal.
+   Now you can just type:
+
+       packet ~/Desktop/Draw6
+
+   and it runs.
+
+
+Questions or something looks off? The script prints a clear summary
+of exactly what it did every time — read that first; it usually tells
+you what's missing (e.g. a file it couldn't find or read).

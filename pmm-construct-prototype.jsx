@@ -255,24 +255,94 @@ async function parseSubInvoice(file) {
 }
 
 /* ---- GC Fee helpers ---- */
-function gcFeeDescription(s) {
+/* ---- Trilogy fee lines ----
+   Three distinct fee types can appear on a Trilogy Partners invoice:
+
+   - GC Fee (during active construction): % of an externally-computed
+     base, formatted as "GC Fee for the period September 2025 14% of
+     $73,954.76". Amount auto-calculates as % x base $.
+
+   - Project Management Fee (during pre-construction): mechanically
+     identical to GC Fee — % of a base, same structured fields, same
+     auto-calc. Only the name differs in how it reads on the invoice.
+
+   - Supervision Fee (during construction): a flat dollar amount set
+     per project. Not a percentage; the user types the dollar figure
+     directly. Description reads "Trilogy Supervision Fee".
+
+   The user picks which fee type when adding the line. All three are
+   editable, none are auto-finalized. */
+const FEE_TYPES = {
+  gc: {
+    key: "gc",
+    label: "GC Fee",
+    addButtonLabel: "+ GC Fee line",
+    isCalculated: true,
+    descriptionPrefix: "GC Fee for the period",
+  },
+  projectmgmt: {
+    key: "projectmgmt",
+    label: "Project Management Fee",
+    addButtonLabel: "+ Project Management Fee line",
+    isCalculated: true,
+    descriptionPrefix: "Project Management Fee for the period",
+  },
+  supervision: {
+    key: "supervision",
+    label: "Trilogy Supervision Fee",
+    addButtonLabel: "+ Trilogy Supervision Fee",
+    isCalculated: false,
+    descriptionPrefix: "Trilogy Supervision Fee",
+  },
+};
+
+// Description for a fee row. Calculated fees (GC, PM) assemble from
+// the month/year/%/base fields; the flat Supervision Fee uses just
+// the prefix (with an optional project phase suffix if provided).
+function feeDescription(s) {
+  const ft = FEE_TYPES[s.feeType] || FEE_TYPES.gc;
+  if (!ft.isCalculated) {
+    // Supervision Fee — flat amount. Just the prefix; the period
+    // (month/year) is optional context the user may add via gcMonth/gcYear.
+    const month = (s.gcMonth || "").trim();
+    const year = (s.gcYear || "").trim();
+    let d = ft.descriptionPrefix;
+    if (month || year) d += ` ${month} ${year}`.replace(/\s+/g, " ");
+    return d.trim();
+  }
+  // Calculated fees — assemble period + percent + base.
   const month = (s.gcMonth || "").trim();
   const year = (s.gcYear || "").trim();
   const pct = (s.gcPct || "").trim();
   const base = (s.gcBase || "").trim();
-  let d = "GC Fee for the period";
+  let d = ft.descriptionPrefix;
   if (month || year) d += ` ${month} ${year}`.replace(/\s+/g, " ");
   if (pct) d += ` ${pct}%`;
   if (base) d += ` of $${base}`;
   return d.trim();
 }
 
-function gcFeeAmount(s) {
+// Amount for a fee row. Calculated fees: % x base. Flat fees (Supervision):
+// just the typed amount.
+function feeAmount(s) {
+  const ft = FEE_TYPES[s.feeType] || FEE_TYPES.gc;
+  if (!ft.isCalculated) {
+    const flat = parseFloat(
+      String(s.amount || "").replace(/[, $]/g, ""));
+    return isNaN(flat) ? NaN : flat;
+  }
   const pct = parseFloat(String(s.gcPct || "").replace(/[, %]/g, ""));
   const base = parseFloat(String(s.gcBase || "").replace(/[, $]/g, ""));
   if (isNaN(pct) || isNaN(base)) return NaN;
   return (pct / 100) * base;
 }
+
+// Back-compat aliases so old call sites keep working unchanged. Any
+// row with kind === "gcfee" had feeType set to "gc" implicitly; we
+// preserve that default in addGcFeeSub. New fee types pass feeType
+// explicitly.
+const gcFeeDescription = feeDescription;
+const gcFeeAmount = feeAmount;
 
 /* ---- Trilogy Labor lines ----
    Two standing line items appear on every Trilogy Partners draw:
@@ -482,7 +552,7 @@ function rgb(hex) {
 
 async function generateInvoicePdf(opts) {
   const { entity, billTo, number, date, lineItems,
-          feeBase, feeAmount, balanceDue } = opts;
+          feeBase, feeAmount, balanceDue, descriptionSummary } = opts;
   const JsPDF = await loadJsPdf();
   const doc = new JsPDF({ unit: "pt", format: "letter" });
   doc.addFileToVFS("EagleLight.ttf", EAGLE_LIGHT_B64);
@@ -610,16 +680,26 @@ async function generateInvoicePdf(opts) {
   doc.setFont("EagleLight", "normal").setFontSize(18);
   doc.setTextColor(...rgb(T.cream50));
   doc.text(fmt(balanceDue), W - M - 8, y + 25, { align: "right" });
-  y += balH + 60;
+  y += balH + 36;
 
-  // signatures
-  doc.setDrawColor(...rgb(T.burg800)).setLineWidth(0.6);
-  doc.line(M, y, M + 220, y);
-  doc.line(W - M - 150, y, W - M, y);
-  doc.setFont("courier", "normal").setFontSize(7.5);
-  doc.setTextColor(...rgb(T.gold700));
-  doc.text("AUTHORIZED SIGNATURE", M, y + 14);
-  doc.text("DATE", W - M - 150, y + 14);
+  // Invoice description summary — natural-language sentence the user
+  // wrote on the Review step (pre-filled mechanically, then edited).
+  // Replaces the old signature/date lines.
+  if (descriptionSummary && descriptionSummary.trim().length > 0) {
+    doc.setFont("courier", "normal").setFontSize(7.5);
+    doc.setTextColor(...rgb(T.gold700));
+    doc.text("DESCRIPTION OF INVOICE", M, y);
+    y += 6;
+    doc.setDrawColor(...rgb(T.gold500)).setLineWidth(0.5);
+    doc.line(M, y, M + 180, y);
+    y += 14;
+    doc.setFont("times", "normal").setFontSize(10.5);
+    doc.setTextColor(...rgb(T.burg900));
+    const summaryLines = doc.splitTextToSize(
+      descriptionSummary.trim(), W - 2 * M);
+    summaryLines.forEach((ln, i) => doc.text(ln, M, y + i * 14));
+    y += summaryLines.length * 14 + 10;
+  }
 
   // footer
   const footY = H - 48;
@@ -904,7 +984,8 @@ function SubRow({ s, updateSub, removeSub }) {
 
   /* GC Fee row: structured fields, auto-calculated amount. */
   if (s.kind === "gcfee") {
-    const calcAmt = gcFeeAmount(s);
+    const ft = FEE_TYPES[s.feeType] || FEE_TYPES.gc;
+    const calcAmt = feeAmount(s);
     return (
       <div style={{
         border: `1px solid ${T.gold400}`,
@@ -920,30 +1001,52 @@ function SubRow({ s, updateSub, removeSub }) {
             fontFamily: FONT.mono, fontSize: 10,
             letterSpacing: ".14em", textTransform: "uppercase",
             color: T.gold700, fontWeight: 500,
-          }}>GC Fee Line</span>
+          }}>{ft.label}</span>
           <button onClick={() => removeSub(s.id)} style={{
             border: "none", background: "none", cursor: "pointer",
             color: T.burg500, fontSize: 18, lineHeight: 1, padding: 0,
           }} aria-label="Remove">&times;</button>
         </div>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 80px 70px 1fr", gap: 8,
-          marginBottom: 10,
-        }}>
-          <input style={inputStyle()} value={s.gcMonth}
-            placeholder="Month"
-            onChange={(e) => updateSub(s.id, { gcMonth: e.target.value })} />
-          <input style={inputStyle()} value={s.gcYear}
-            placeholder="Year"
-            onChange={(e) => updateSub(s.id, { gcYear: e.target.value })} />
-          <input style={inputStyle()} value={s.gcPct}
-            placeholder="%"
-            onChange={(e) => updateSub(s.id, { gcPct: e.target.value })} />
-          <input style={inputStyle()} value={s.gcBase}
-            placeholder="Base $"
-            onChange={(e) => updateSub(s.id, { gcBase: e.target.value })} />
-        </div>
+
+        {/* Calculated fees (GC, PM): four structured fields. */}
+        {ft.isCalculated && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 80px 70px 1fr", gap: 8,
+            marginBottom: 10,
+          }}>
+            <input style={inputStyle()} value={s.gcMonth}
+              placeholder="Month"
+              onChange={(e) => updateSub(s.id, { gcMonth: e.target.value })} />
+            <input style={inputStyle()} value={s.gcYear}
+              placeholder="Year"
+              onChange={(e) => updateSub(s.id, { gcYear: e.target.value })} />
+            <input style={inputStyle()} value={s.gcPct}
+              placeholder="%"
+              onChange={(e) => updateSub(s.id, { gcPct: e.target.value })} />
+            <input style={inputStyle()} value={s.gcBase}
+              placeholder="Base $"
+              onChange={(e) => updateSub(s.id, { gcBase: e.target.value })} />
+          </div>
+        )}
+
+        {/* Flat fees (Supervision): the user types the dollar amount
+            directly. Period (month/year) is optional context. */}
+        {!ft.isCalculated && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 80px", gap: 8,
+            marginBottom: 10,
+          }}>
+            <input style={inputStyle()} value={s.gcMonth}
+              placeholder="Month (optional)"
+              onChange={(e) => updateSub(s.id, { gcMonth: e.target.value })} />
+            <input style={inputStyle()} value={s.gcYear}
+              placeholder="Year"
+              onChange={(e) => updateSub(s.id, { gcYear: e.target.value })} />
+          </div>
+        )}
+
         <div style={{
           display: "grid", gridTemplateColumns: "1fr 140px", gap: 8,
           alignItems: "center",
@@ -952,25 +1055,40 @@ function SubRow({ s, updateSub, removeSub }) {
             fontFamily: FONT.body, fontSize: 12, fontStyle: "italic",
             color: T.burg800, lineHeight: 1.5,
           }}>
-            {gcFeeDescription(s)}
+            {feeDescription(s)}
           </div>
-          <div style={{
-            ...inputStyle(),
-            background: isNaN(calcAmt) ? T.cream100 : T.cream50,
-            border: `1.5px solid ${isNaN(calcAmt) ? T.cream300 : T.gold500}`,
-            textAlign: "right",
-            color: isNaN(calcAmt) ? T.cream400 : T.burg900,
-            fontWeight: isNaN(calcAmt) ? 400 : 700,
-            fontFamily: FONT.display, fontSize: 15,
-          }}>
-            {isNaN(calcAmt) ? "—" : money(calcAmt)}
-          </div>
+          {ft.isCalculated ? (
+            <div style={{
+              ...inputStyle(),
+              background: isNaN(calcAmt) ? T.cream100 : T.cream50,
+              border: `1.5px solid ${isNaN(calcAmt) ? T.cream300 : T.gold500}`,
+              textAlign: "right",
+              color: isNaN(calcAmt) ? T.cream400 : T.burg900,
+              fontWeight: isNaN(calcAmt) ? 400 : 700,
+              fontFamily: FONT.display, fontSize: 15,
+            }}>
+              {isNaN(calcAmt) ? "—" : money(calcAmt)}
+            </div>
+          ) : (
+            <input style={{
+              ...inputStyle(),
+              border: `1.5px solid ${T.gold500}`,
+              textAlign: "right",
+              fontFamily: FONT.display, fontSize: 15,
+              fontWeight: 700, color: T.burg900,
+            }} value={s.amount || ""}
+              placeholder="0.00"
+              onChange={(e) => updateSub(s.id,
+                { amount: e.target.value })} />
+          )}
         </div>
         <div style={{
           marginTop: 8, fontSize: 10.5, fontFamily: FONT.bodySm,
           color: T.gold700,
         }}>
-          Amount auto-calculates as % &times; base $.
+          {ft.isCalculated
+            ? "Amount auto-calculates as % \u00d7 base $."
+            : "Flat amount, varies per project. Type the dollar figure."}
         </div>
       </div>
     );
@@ -1099,6 +1217,11 @@ export default function App() {
   const [feeBaseManual, setFeeBaseManual] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState("");
+  // Invoice description summary — natural-language sentence shown on
+  // the Review step and printed on the PDF. Pre-filled mechanically
+  // from line items when the user reaches Review, then edited freely.
+  const [descriptionSummary, setDescriptionSummary] = useState("");
+  const [summaryAutofilled, setSummaryAutofilled] = useState(false);
   const fileRef = useRef(null);
 
   const entity = entityKey ? ENTITIES[entityKey] : null;
@@ -1147,9 +1270,37 @@ export default function App() {
     return parseFloat(feeBaseManual) || 0;
   }, [entity, feeBaseManual]);
 
-  const feeAmount = entity && entity.hasFee
+  // DesignWorks-style standing fee (auto 20%). Distinct from the
+  // per-line fee rows (GC/PM/Supervision) which are calculated by
+  // the top-level feeAmount() helper. Named entityFeeAmount to avoid
+  // shadowing.
+  const entityFeeAmount = entity && entity.hasFee
     ? feeBase * entity.feeRate : 0;
-  const balanceDue = itemsTotal + feeAmount;
+  const balanceDue = itemsTotal + entityFeeAmount;
+
+  // Build a mechanical first-draft summary from current line items.
+  // Used as the pre-fill for the editable description field on Review.
+  const buildSummaryDraft = useCallback(() => {
+    const month = new Date(date || Date.now())
+      .toLocaleString("en-US", { month: "long" });
+    const items = lineItems
+      .map((it) => (it.desc || "").trim())
+      .filter((d) => d.length > 0);
+    if (items.length === 0) {
+      return `Invoice for ${month}.`;
+    }
+    return `Invoice for ${month} for the following items: `
+      + items.join("; ") + ".";
+  }, [date, lineItems]);
+
+  // When the user lands on the Review step for the first time, pre-fill
+  // the summary mechanically. Don't overwrite their edits on revisits.
+  useEffect(() => {
+    if (steps[step] === "Review" && !summaryAutofilled) {
+      setDescriptionSummary(buildSummaryDraft());
+      setSummaryAutofilled(true);
+    }
+  }, [step, summaryAutofilled, buildSummaryDraft]);
 
   const steps = !entity
     ? ["Type", "Client", "Number", "Date", "Items", "Review"]
@@ -1210,14 +1361,18 @@ export default function App() {
       rawText: [], showRaw: false, pageCount: 0,
       detected: { value: 0, basis: "manual" }, note: null,
     }]);
-  const addGcFeeSub = () =>
+  const addFeeSub = (feeTypeKey) =>
     setSubs((arr) => [...arr, {
-      id: nextId(), source: "GC Fee", kind: "gcfee",
+      id: nextId(),
+      source: FEE_TYPES[feeTypeKey].label,
+      kind: "gcfee", feeType: feeTypeKey,
       confidence: "high", qty: "1", rate: "", desc: "", amount: "",
       gcMonth: "", gcYear: "", gcPct: "", gcBase: "",
       rawText: [], showRaw: false, pageCount: 0,
       detected: { value: 0, basis: "manual" }, note: null,
     }]);
+  // Back-compat alias (the existing GC Fee button calls this name).
+  const addGcFeeSub = () => addFeeSub("gc");
 
   const addLaborSub = (laborPerson) =>
     setSubs((arr) => [...arr, {
@@ -1558,9 +1713,17 @@ export default function App() {
             style={S.btn("secondary", false)}>
             + Add line with no document
           </button>
-          <button onClick={addGcFeeSub}
+          <button onClick={() => addFeeSub("gc")}
             style={S.btn("secondary", false)}>
-            + Add GC Fee line
+            + GC Fee
+          </button>
+          <button onClick={() => addFeeSub("projectmgmt")}
+            style={S.btn("secondary", false)}>
+            + Project Management Fee
+          </button>
+          <button onClick={() => addFeeSub("supervision")}
+            style={S.btn("secondary", false)}>
+            + Trilogy Supervision Fee
           </button>
           <button onClick={() => addLaborSub("rath")}
             style={S.btn("secondary", false)}>
@@ -1617,7 +1780,7 @@ export default function App() {
             <span>{money(feeBase)} &times;{" "}
               {Math.round(entity.feeRate * 100)}%</span>
             <span style={{ fontFamily: FONT.display, fontSize: 28,
-              color: T.burg700 }}>{money(feeAmount)}</span>
+              color: T.burg700 }}>{money(entityFeeAmount)}</span>
           </div>
         </div>
       </>
@@ -1644,7 +1807,7 @@ export default function App() {
             ["Line items", `${lineItems.length} · ${money(itemsTotal)}`],
             ...(entity.hasFee
               ? [[entity.feeLabel,
-                  `${money(feeBase)} × ${Math.round(entity.feeRate*100)}% = ${money(feeAmount)}`]]
+                  `${money(feeBase)} × ${Math.round(entity.feeRate*100)}% = ${money(entityFeeAmount)}`]]
               : []),
             ["Balance Due", money(balanceDue)],
           ].map(([k, v], i, arr) => {
@@ -1672,6 +1835,54 @@ export default function App() {
               </div>
             );
           })}
+        </div>
+
+        {/* Editable invoice description summary. Pre-filled mechanically
+            from line items; user rewrites it into prose before generating. */}
+        <div style={{
+          marginTop: 22, padding: "16px 20px",
+          background: T.cream100,
+          border: `1px solid ${T.cream300}`, borderRadius: 6,
+        }}>
+          <div style={{
+            display: "flex", justifyContent: "space-between",
+            alignItems: "baseline", marginBottom: 6,
+          }}>
+            <div style={{
+              fontFamily: FONT.mono, fontSize: 10.5,
+              letterSpacing: ".12em", textTransform: "uppercase",
+              color: T.gold700,
+            }}>
+              Invoice Description Summary
+            </div>
+            <button
+              onClick={() => setDescriptionSummary(buildSummaryDraft())}
+              style={{
+                border: "none", background: "none", padding: 0,
+                cursor: "pointer", color: T.burg700,
+                textDecoration: "underline",
+                fontFamily: FONT.mono, fontSize: 10,
+              }}>regenerate from items</button>
+          </div>
+          <div style={{
+            fontFamily: FONT.bodySm, fontSize: 11.5,
+            color: T.burg800, fontStyle: "italic",
+            marginBottom: 8, lineHeight: 1.5,
+          }}>
+            Pre-filled from your line items. Rewrite it in your own
+            voice — this prints at the bottom of the invoice as the
+            "Description of Invoice."
+          </div>
+          <textarea
+            value={descriptionSummary}
+            onChange={(e) => setDescriptionSummary(e.target.value)}
+            rows={4}
+            style={{
+              ...inputStyle(),
+              minHeight: 80, resize: "vertical",
+              fontFamily: FONT.body, fontSize: 13,
+              lineHeight: 1.55,
+            }} />
         </div>
 
         {entity.uploadsItems && (
@@ -1720,7 +1931,10 @@ export default function App() {
             try {
               const name = await generateInvoicePdf({
                 entity, billTo, number, date, lineItems,
-                itemsTotal, feeBase, feeAmount, balanceDue,
+                itemsTotal, feeBase,
+                feeAmount: entityFeeAmount,
+                balanceDue,
+                descriptionSummary,
               });
               setGenMsg(`Downloaded ${name}`);
             } catch (err) {
@@ -1937,7 +2151,7 @@ export default function App() {
                 </div>
                 <div style={{ padding: "6px 7px", textAlign: "right",
                   fontStyle: "normal" }}>
-                  {feeAmount ? money(feeAmount) : "\u00a0"}
+                  {entityFeeAmount ? money(entityFeeAmount) : "\u00a0"}
                 </div>
               </div>
             )}

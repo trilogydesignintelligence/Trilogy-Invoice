@@ -1,5 +1,5 @@
 # PMM Construct — Python dependencies
-# Install with:  pip install -r requirements.txt
+# Install with:  pip3 install -r requirements.txt
 #
 # These cover the two backend tools:
 #   assemble_packet.py   needs pypdf, reportlab
@@ -7,9 +7,12 @@
 #
 # ocr_sub_invoice.py ALSO needs the Tesseract binary, which is NOT a
 # pip package — install it separately:
-#   Ubuntu/Debian:  sudo apt-get install tesseract-ocr
 #   macOS:          brew install tesseract
+#   Ubuntu/Debian:  sudo apt-get install tesseract-ocr
 #   Windows:        https://github.com/UB-Mannheim/tesseract/wiki
+#
+# For the packet assembler alone (the Path A workflow), you only need
+# the first two: pip3 install pypdf reportlab
 
 pypdf>=5.0
 reportlab>=4.0

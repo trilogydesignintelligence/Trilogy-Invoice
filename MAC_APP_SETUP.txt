@@ -1,0 +1,127 @@
+PMM CONSTRUCT — DRAG-AND-DROP PACKET APP
+How to set up the no-Terminal app on a Mac
+============================================================
+
+GOAL
+   After this one-time setup, making a packet is:
+      1. Put the PDFs in a folder (invoice + subs)
+      2. Drag the folder onto the PacketAssembler app icon
+      3. PACKET.pdf appears in the folder
+   No Terminal, no typing — just drag and drop.
+
+   This setup takes about 10 minutes and is done ONCE per Mac.
+   You (or one tech-comfortable person) does it; everyone else
+   just drags folders afterward.
+
+
+============================================================
+PART A — Install Python and the libraries (one time, ~5 min)
+============================================================
+   This is the same engine the app uses behind the scenes.
+
+   1. Open Terminal (Cmd+Space, type "Terminal", Return).
+
+   2. Check for Python 3 — type and press Return:
+          python3 --version
+      - See "Python 3.x.x"? Good, go to step 3.
+      - See "command not found"? Install it from
+        https://www.python.org/downloads/ (download the macOS
+        installer, run it with defaults), then reopen Terminal.
+
+   3. Install the two libraries — type and press Return:
+          pip3 install pypdf reportlab
+      Wait for "Successfully installed".
+
+   You can close Terminal now and not open it again.
+
+
+============================================================
+PART B — Put the assembler script somewhere permanent
+============================================================
+   1. Make a folder you won't delete, e.g. in your home folder:
+          /Users/<you>/PMMConstruct/
+   2. Put  assemble_packet.py  inside it.
+   3. You'll need this file's full path in Part C. To get it:
+      right-click assemble_packet.py in Finder, hold Option, and
+      choose "Copy ... as Pathname." That puts the full path on
+      your clipboard. It will look like:
+          /Users/<you>/PMMConstruct/assemble_packet.py
+
+
+============================================================
+PART C — Build the drag-and-drop app (one time, ~3 min)
+============================================================
+   Every Mac has "Script Editor" built in. We'll paste in the
+   droplet script, point it at assemble_packet.py, and save it as
+   an app.
+
+   1. Open Script Editor (Cmd+Space, type "Script Editor", Return).
+   2. File > New.
+   3. Open  PacketAssembler.applescript  (the file that came with
+      this) in any text editor, select ALL, copy, and paste it into
+      the Script Editor window — replacing anything already there.
+   4. Find this line near the top:
+          property SCRIPT_PATH : "/REPLACE/WITH/PATH/TO/assemble_packet.py"
+      Replace the /REPLACE/WITH/PATH/TO/assemble_packet.py part with
+      the real path you copied in Part B. Keep the quotes. Example:
+          property SCRIPT_PATH : "/Users/christiana/PMMConstruct/assemble_packet.py"
+   5. File > Export...
+      - File Format: Application
+      - Name it:  PacketAssembler
+      - Save it somewhere handy (Desktop or Applications).
+   6. Quit Script Editor.
+
+   You now have a PacketAssembler app.
+
+
+============================================================
+PART D — First run (clears Mac's security prompt, one time)
+============================================================
+   Because you built this app yourself rather than downloading it
+   from the App Store, macOS may ask permission the first time.
+
+   1. Double-click PacketAssembler.
+   2. If macOS says it "cannot be opened because it is from an
+      unidentified developer" — that's expected for a self-made app.
+      Right-click the app > Open > Open. You only do this once.
+   3. The first run may also ask for permission to control Finder or
+      run a shell command — click OK / Allow.
+
+   After that, it just works.
+
+
+============================================================
+USING IT (what everyone does, every time)
+============================================================
+   1. Make a folder for the draw (Desktop is fine).
+   2. Put the PDFs in it, named in invoice order:
+          00_invoice.pdf
+          01_ferguson_bath.pdf
+          02_timberline_porta_potty.pdf
+          03_lowes_shelf.pdf
+      (Photo instead of a PDF? Open it in Preview, File > Export
+       as PDF, save into the folder.)
+   3. Drag the FOLDER onto the PacketAssembler app icon.
+   4. A summary appears; click "Open Folder" to see PACKET.pdf.
+
+   Fixing a vendor name on the contents page: after the first run a
+   file called packet_labels.txt appears in the folder. Open it in
+   TextEdit, fix the text to the right of "=", save, and drag the
+   folder onto the app again.
+
+
+============================================================
+SHARING WITH THE OTHER 1–2 PEOPLE
+============================================================
+   Each person's Mac needs Part A (Python + libraries) done once.
+   Then you can either:
+   - Have them repeat Parts B–C on their Mac, OR
+   - Copy your finished PacketAssembler app AND the PMMConstruct
+     folder to their Mac in the SAME location (same path), so the
+     SCRIPT_PATH inside the app still points to the right place.
+   The first approach is more reliable across different Macs.
+
+
+Something not working? The app shows a plain-English message saying
+what's wrong (Python missing, script not found, no PDFs in the
+folder). Read that first — it almost always names the fix.
