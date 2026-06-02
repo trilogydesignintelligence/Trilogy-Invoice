@@ -1205,6 +1205,10 @@ export default function App() {
 
   const [step, setStep] = useState(0);
   const [entityKey, setEntityKey] = useState(null);
+  // Project phase (Partners draws only): "preconstruction" or
+  // "construction". Drives which fees/labor the team is shown, so
+  // the wrong-phase options can't be added by mistake.
+  const [phase, setPhase] = useState(null);
   const [billTo, setBillTo] = useState("");
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(() =>
@@ -1281,15 +1285,34 @@ export default function App() {
   // Build a mechanical first-draft summary from current line items.
   // Used as the pre-fill for the editable description field on Review.
   const buildSummaryDraft = useCallback(() => {
-    const month = new Date(date || Date.now())
-      .toLocaleString("en-US", { month: "long" });
+    // Draws always invoice for the PREVIOUS month, so the summary
+    // names the month before the invoice date. Parse the YYYY-MM-DD
+    // parts directly to avoid timezone roll-back on the 1st.
+    const MONTHS = ["January", "February", "March", "April", "May",
+      "June", "July", "August", "September", "October", "November",
+      "December"];
+    let monthIdx, year;
+    const m = String(date || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      year = parseInt(m[1], 10);
+      monthIdx = parseInt(m[2], 10) - 1;   // 0-based
+    } else {
+      const d = new Date();
+      year = d.getFullYear();
+      monthIdx = d.getMonth();
+    }
+    // step back one month, wrapping across the year boundary
+    monthIdx -= 1;
+    if (monthIdx < 0) { monthIdx = 11; year -= 1; }
+    const month = MONTHS[monthIdx];
+
     const items = lineItems
       .map((it) => (it.desc || "").trim())
       .filter((d) => d.length > 0);
     if (items.length === 0) {
-      return `Invoice for ${month}.`;
+      return `Invoice for ${month} ${year}.`;
     }
-    return `Invoice for ${month} for the following items: `
+    return `Invoice for ${month} ${year} for the following items: `
       + items.join("; ") + ".";
   }, [date, lineItems]);
 
@@ -1305,7 +1328,8 @@ export default function App() {
   const steps = !entity
     ? ["Type", "Client", "Number", "Date", "Items", "Review"]
     : entity.uploadsItems
-      ? ["Type", "Client", "Draw #", "Date", "Upload subs", "Review"]
+      ? ["Type", "Phase", "Client", "Draw #", "Date",
+         "Upload subs", "Review"]
       : ["Type", "Client", "Invoice #", "Date", "Line items",
          "Fee", "Review"];
 
@@ -1315,6 +1339,7 @@ export default function App() {
   const canProceed = () => {
     switch (steps[step]) {
       case "Type": return !!entityKey;
+      case "Phase": return !!phase;
       case "Client": return billTo.trim().length > 0;
       case "Draw #":
       case "Invoice #": return number.trim().length > 0;
@@ -1381,8 +1406,12 @@ export default function App() {
       qty: "1", rate: "", desc: "", amount: "",
       laborPerson,
       laborHours: "",
-      // Only meaningful for Miller; Rath has a fixed category.
-      laborCategory: "preconstruction",
+      // Mark Miller's category defaults from the project phase chosen
+      // earlier (construction draws -> Construction Trilogy Labor),
+      // and stays editable on the row. Only meaningful for Miller;
+      // Rath has a fixed category.
+      laborCategory: phase === "construction"
+        ? "construction" : "preconstruction",
       // Optional hours-source PDF (BT Daily Log for Mark, email for
       // Michael). Empty until the user uploads one.
       laborSource: "", laborEntries: [], laborBasis: "",
@@ -1553,7 +1582,11 @@ export default function App() {
           {Object.values(ENTITIES).map((e) => {
             const sel = entityKey === e.key;
             return (
-              <button key={e.key} onClick={() => setEntityKey(e.key)}
+              <button key={e.key} onClick={() => {
+                  setEntityKey(e.key);
+                  setPhase(null);   // phase only applies to Partners;
+                                    // clear any stale choice on switch
+                }}
                 style={{
                   textAlign: "left", padding: "20px 22px",
                   border: `1.5px solid ${sel ? T.burg700 : T.cream300}`,
@@ -1580,6 +1613,58 @@ export default function App() {
                     ? "one line per uploaded sub invoice"
                     : "line items entered manually"}
                 </div>
+              </button>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  function renderPhaseStep() {
+    const PHASES = [
+      {
+        key: "preconstruction",
+        name: "Pre-Construction",
+        detail: "Project Management Fee · Mark Miller bills as "
+          + "Pre-Construction Trilogy Labor",
+      },
+      {
+        key: "construction",
+        name: "Construction",
+        detail: "GC Fee + Trilogy Supervision Fee · Mark Miller "
+          + "bills as Construction Trilogy Labor",
+      },
+    ];
+    return (
+      <>
+        <h2 style={S.h}>What phase is this draw?</h2>
+        <p style={S.sub}>
+          This sets which fees and labor categories you&rsquo;ll see
+          on the next steps, so nothing gets missed or mixed up.
+        </p>
+        <div style={{ display: "grid", gap: 14 }}>
+          {PHASES.map((p) => {
+            const sel = phase === p.key;
+            return (
+              <button key={p.key} onClick={() => setPhase(p.key)}
+                style={{
+                  textAlign: "left", padding: "20px 22px",
+                  border: `1.5px solid ${sel ? T.burg700 : T.cream300}`,
+                  background: T.cream50,
+                  borderRadius: 6, cursor: "pointer",
+                  boxShadow: sel ? T.shadowMd : T.shadowSm,
+                  display: "block", width: "100%",
+                }}>
+                <div style={{
+                  fontFamily: FONT.display, fontSize: 22,
+                  color: T.burg800, marginBottom: 6, lineHeight: 1.1,
+                }}>{p.name}</div>
+                <div style={{
+                  fontFamily: FONT.mono, fontSize: 10.5,
+                  color: T.gold700, letterSpacing: ".08em",
+                  textTransform: "uppercase", lineHeight: 1.5,
+                }}>{p.detail}</div>
               </button>
             );
           })}
@@ -1707,24 +1792,62 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 16,
+        {phase && (
+          <div style={{
+            marginTop: 16, marginBottom: 4,
+            fontFamily: FONT.mono, fontSize: 10,
+            letterSpacing: ".1em", textTransform: "uppercase",
+            color: T.gold700,
+          }}>
+            {phase === "preconstruction"
+              ? "Pre-Construction phase — fees for this phase shown below"
+              : "Construction phase — fees for this phase shown below"}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 12, marginTop: 8,
           flexWrap: "wrap" }}>
           <button onClick={addManualSub}
             style={S.btn("secondary", false)}>
             + Add line with no document
           </button>
-          <button onClick={() => addFeeSub("gc")}
-            style={S.btn("secondary", false)}>
-            + GC Fee
-          </button>
-          <button onClick={() => addFeeSub("projectmgmt")}
-            style={S.btn("secondary", false)}>
-            + Project Management Fee
-          </button>
-          <button onClick={() => addFeeSub("supervision")}
-            style={S.btn("secondary", false)}>
-            + Trilogy Supervision Fee
-          </button>
+          {/* Pre-construction: Project Management Fee only. */}
+          {phase === "preconstruction" && (
+            <button onClick={() => addFeeSub("projectmgmt")}
+              style={S.btn("secondary", false)}>
+              + Project Management Fee
+            </button>
+          )}
+          {/* Construction: GC Fee + Trilogy Supervision Fee. */}
+          {phase === "construction" && (
+            <button onClick={() => addFeeSub("gc")}
+              style={S.btn("secondary", false)}>
+              + GC Fee
+            </button>
+          )}
+          {phase === "construction" && (
+            <button onClick={() => addFeeSub("supervision")}
+              style={S.btn("secondary", false)}>
+              + Trilogy Supervision Fee
+            </button>
+          )}
+          {/* If no phase was set (older drafts), show all fees so
+              nothing is unreachable. */}
+          {!phase && (
+            <>
+              <button onClick={() => addFeeSub("gc")}
+                style={S.btn("secondary", false)}>
+                + GC Fee
+              </button>
+              <button onClick={() => addFeeSub("projectmgmt")}
+                style={S.btn("secondary", false)}>
+                + Project Management Fee
+              </button>
+              <button onClick={() => addFeeSub("supervision")}
+                style={S.btn("secondary", false)}>
+                + Trilogy Supervision Fee
+              </button>
+            </>
+          )}
           <button onClick={() => addLaborSub("rath")}
             style={S.btn("secondary", false)}>
             + Michael Rath hours
@@ -2051,6 +2174,7 @@ export default function App() {
   function renderStep() {
     switch (steps[step]) {
       case "Type": return renderTypeStep();
+      case "Phase": return renderPhaseStep();
       case "Client": return (
         <>
           <h2 style={S.h}>Who is this billed to?</h2>
