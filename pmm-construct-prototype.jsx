@@ -354,8 +354,8 @@ const gcFeeAmount = feeAmount;
      (Design Modeling). No phase toggle is shown.
 
    - Phased people (Mark Miller): their category varies per invoice
-     between Pre-Construction and Construction Trilogy Labor, so a
-     toggle is shown on the row and defaults from the draw's phase.
+     between Pre-Construction and Construction Trilogy Labor, set by
+     the draw's phase chosen on the Phase step (no per-row toggle).
 
    The user types hours; rate, description, and cost code are locked. */
 const LABOR_PEOPLE = {
@@ -414,21 +414,21 @@ const LABOR_PEOPLE = {
 
 // Look up the category for a labor row. For fixed-category people
 // (Rath, Ladnier, Habermaas), always the fixed category. For phased
-// people (Miller), the user-selected category (defaults to
-// preconstruction if unset).
-function laborCategory(s) {
+// people (Miller), the category follows the draw's phase chosen on
+// the Phase step — there is no per-row override.
+function laborCategory(s, phase) {
   const person = LABOR_PEOPLE[s.laborPerson];
   if (!person) return null;
   if (person.fixedCategory) return person.fixedCategory;
-  const key = s.laborCategory || "preconstruction";
+  const key = phase === "construction" ? "construction" : "preconstruction";
   return person.categories[key] || person.categories.preconstruction;
 }
 
 // Description as it appears on the invoice line item: e.g.
 // "Michael Rath hours for design modeling".
-function laborDescription(s) {
+function laborDescription(s, phase) {
   const person = LABOR_PEOPLE[s.laborPerson];
-  const cat = laborCategory(s);
+  const cat = laborCategory(s, phase);
   if (!person || !cat) return "";
   return `${person.fullName} ${cat.descriptionTail}`;
 }
@@ -459,22 +459,41 @@ function laborAmount(s) {
    The extracted total always fills an editable field — nothing is
    ever auto-finalized. */
 function parseHoursPdf(lines) {
-  // (1) Buildertrend Daily Log: "Title: N hours" lines.
+  // (1) Buildertrend Daily Log: one "Title: N hours" line per entry.
+  // Buildertrend sometimes splits a decimal like 7.5 into separate
+  // text fragments ("7", ".", "5"), which the PDF reader rejoins with
+  // spaces as "7 . 5". Requiring an unbroken number silently drops
+  // every decimal entry. So instead we grab whatever sits between
+  // "Title:" and "hours" and keep only digits and the dot. We also
+  // count Title lines independently of whether their hours parsed, so
+  // any entry we still can't read surfaces as a mismatch rather than a
+  // silent undercount on a billing document.
   const btEntries = [];
+  let titleCount = 0;
   for (const line of lines) {
-    const m = line.match(/^\s*Title:\s*([\d.]+)\s*[Hh]ours?\s*$/);
+    if (/^\s*Title:/.test(line)) titleCount++;
+    const m = line.match(/Title:(.*?)[Hh]ours?\b/);
     if (m) {
-      const h = parseFloat(m[1]);
+      const h = parseFloat(m[1].replace(/[^\d.]/g, ""));
       if (!isNaN(h)) btEntries.push(h);
     }
   }
-  if (btEntries.length > 0) {
+  if (titleCount > 0 || btEntries.length > 0) {
+    const total = btEntries.reduce((s, h) => s + h, 0);
+    const missed = titleCount - btEntries.length;
+    const reconciles = missed <= 0;
     return {
-      total: btEntries.reduce((s, h) => s + h, 0),
+      total,
       entries: btEntries.map((h, i) =>
         ({ label: `Entry ${i + 1}`, hours: h })),
-      basis: `${btEntries.length} Buildertrend Daily Log entries`,
-      confidence: "high",
+      basis: reconciles
+        ? `${btEntries.length} Buildertrend Daily Log entries`
+        : `Read ${btEntries.length} of ${titleCount} Daily Log entries — `
+          + `${missed} could not be read. VERIFY the total before billing.`,
+      confidence: reconciles ? "high" : "low",
+      reconciles,
+      entryCount: btEntries.length,
+      titleCount,
     };
   }
   // (2) Email summary line: "46 Total for May@ $175 $8050".
@@ -535,7 +554,12 @@ async function parseHoursFromFile(file) {
     }
     const result = parseHoursPdf(lines);
     return {
-      ok: result.total > 0,
+      // A BT log that didn't reconcile (some entries unread) is NOT ok,
+      // so the incomplete total won't auto-fill — the row shows the
+      // warning and the user enters/verifies the figure deliberately.
+      // (reconciles is undefined for the email paths, so they are
+      // unaffected.)
+      ok: result.total > 0 && result.reconciles !== false,
       ...result,
       rawText: lines,
       source: file.name,
@@ -765,13 +789,13 @@ async function generateInvoicePdf(opts) {
    spinner). Splitting it out keeps the rules of hooks happy and
    keeps SubRow's logic readable.
    ============================================================ */
-function LaborSubRow({ s, updateSub, removeSub }) {
+function LaborSubRow({ s, phase, updateSub, removeSub }) {
   const person = LABOR_PEOPLE[s.laborPerson];
-  const cat = laborCategory(s);
+  const cat = laborCategory(s, phase);
   const calcAmt = laborAmount(s);
-  // Phased people (Miller, Ladnier) get a Pre-Construction /
-  // Construction toggle; fixed-category people (Rath, Habermaas)
-  // don't. The toggle and the hours-source hint both key off this.
+  // Phased people (Miller) book to Pre-Construction or Construction
+  // based on the draw's phase; fixed-category people (Rath, Ladnier,
+  // Habermaas) don't. The hours-source hint keys off this too.
   const hasCategories = !!(person && person.categories);
   const hoursFileRef = useRef(null);
   const [parsingHours, setParsingHours] = useState(false);
@@ -824,37 +848,18 @@ function LaborSubRow({ s, updateSub, removeSub }) {
         }} aria-label="Remove">&times;</button>
       </div>
 
-      {hasCategories && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{
-            fontFamily: FONT.mono, fontSize: 10,
-            letterSpacing: ".1em", textTransform: "uppercase",
-            color: T.gold700, marginBottom: 5,
-          }}>Category for this invoice</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {[
-              { key: "preconstruction", label: "Pre-Construction" },
-              { key: "construction", label: "Construction" },
-            ].map((opt) => {
-              const sel = (s.laborCategory || "preconstruction") === opt.key;
-              return (
-                <button key={opt.key}
-                  onClick={() => updateSub(s.id,
-                    { laborCategory: opt.key })}
-                  style={{
-                    flex: 1, padding: "8px 10px",
-                    fontFamily: FONT.ui, fontSize: 11,
-                    fontWeight: 700, letterSpacing: ".06em",
-                    textTransform: "uppercase",
-                    background: sel ? T.burg700 : T.cream50,
-                    color: sel ? T.cream50 : T.burg700,
-                    border: `1.5px solid ${sel ? T.burg700 : T.cream300}`,
-                    borderRadius: 4, cursor: "pointer",
-                    boxShadow: sel ? T.shadowSm : "none",
-                  }}>{opt.label}</button>
-              );
-            })}
-          </div>
+      {hasCategories && cat && (
+        <div style={{
+          marginBottom: 10,
+          fontFamily: FONT.mono, fontSize: 10,
+          letterSpacing: ".08em", textTransform: "uppercase",
+          color: T.gold700,
+        }}>
+          Category: {cat.label}
+          <span style={{
+            color: T.cream400, textTransform: "none",
+            letterSpacing: 0, fontStyle: "italic",
+          }}> — set by the draw&rsquo;s phase</span>
         </div>
       )}
 
@@ -997,7 +1002,7 @@ function LaborSubRow({ s, updateSub, removeSub }) {
         fontFamily: FONT.body, fontSize: 12, fontStyle: "italic",
         color: T.burg800, lineHeight: 1.5, marginTop: 4,
       }}>
-        {laborDescription(s)}
+        {laborDescription(s, phase)}
       </div>
       <div style={{
         marginTop: 6, fontFamily: FONT.mono, fontSize: 10,
@@ -1009,7 +1014,7 @@ function LaborSubRow({ s, updateSub, removeSub }) {
   );
 }
 
-function SubRow({ s, updateSub, removeSub }) {
+function SubRow({ s, phase, updateSub, removeSub }) {
   const c = CONF[s.confidence];
   const amt = parseFloat(s.amount);
   const reconciles =
@@ -1130,10 +1135,10 @@ function SubRow({ s, updateSub, removeSub }) {
 
   /* Labor row: locked rate, user types hours. For phased people
      (Mark Miller), the category (Pre-Construction vs. Construction)
-     is also user-selected. */
+     is set by the draw's phase, not a per-row toggle. */
   if (s.kind === "labor") {
     return (
-      <LaborSubRow s={s} updateSub={updateSub} removeSub={removeSub} />
+      <LaborSubRow s={s} phase={phase} updateSub={updateSub} removeSub={removeSub} />
     );
   }
   /* Standard sub-invoice row. */
@@ -1283,7 +1288,7 @@ export default function App() {
         }
         let desc;
         if (s.kind === "gcfee") desc = gcFeeDescription(s);
-        else if (s.kind === "labor") desc = laborDescription(s);
+        else if (s.kind === "labor") desc = laborDescription(s, phase);
         else desc = s.desc;
         return {
           qty: s.qty, desc, rate: s.rate,
@@ -1297,7 +1302,7 @@ export default function App() {
       if (isNaN(amt) && !isNaN(q) && !isNaN(r)) amt = q * r;
       return { ...it, amount: isNaN(amt) ? 0 : amt };
     });
-  }, [entity, items, subs]);
+  }, [entity, items, subs, phase]);
 
   const itemsTotal = useMemo(
     () => lineItems.reduce((s, it) => s + (it.amount || 0), 0),
@@ -1441,13 +1446,10 @@ export default function App() {
       qty: "1", rate: "", desc: "", amount: "",
       laborPerson,
       laborHours: "",
-      // Phased people's category defaults from the project phase chosen
-      // earlier (construction draws -> Construction Trilogy Labor),
-      // and stays editable on the row. Only meaningful for people with
-      // categories (Miller); Rath, Ladnier, and Habermaas have a fixed
-      // category.
-      laborCategory: phase === "construction"
-        ? "construction" : "preconstruction",
+      // No per-row category is stored. Phased people (Miller) take
+      // their category live from the draw's phase via
+      // laborCategory(s, phase); fixed-category people (Rath, Ladnier,
+      // Habermaas) ignore phase entirely.
       // Optional hours-source PDF (BT Daily Log for phased crew,
       // email for design). Empty until the user uploads one.
       laborSource: "", laborEntries: [], laborBasis: "",
@@ -1821,7 +1823,7 @@ export default function App() {
                   return o[a.s.confidence] - o[b.s.confidence];
                 })
                 .map(({ s }) => (
-                  <SubRow key={s.id} s={s}
+                  <SubRow key={s.id} s={s} phase={phase}
                     updateSub={updateSub} removeSub={removeSub} />
                 ))}
             </div>
