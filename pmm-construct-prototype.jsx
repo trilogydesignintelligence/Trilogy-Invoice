@@ -349,14 +349,13 @@ const gcFeeAmount = feeAmount;
    Each person has a locked hourly rate; the user types hours and the
    amount is hours x rate. People fall into two shapes:
 
-   - Fixed-category people (Michael Rath, Christiana Habermaas): their
-     work always books to one category/cost code (Design Modeling).
-     No phase toggle is shown.
+   - Fixed-category people (Michael Rath, Peyton Ladnier, Christiana
+     Habermaas): their work always books to one category/cost code
+     (Design Modeling). No phase toggle is shown.
 
-   - Phased people (Mark Miller, Peyton Ladnier): their category varies
-     per invoice between Pre-Construction and Construction Trilogy
-     Labor, so a toggle is shown on the row and defaults from the
-     draw's phase.
+   - Phased people (Mark Miller): their category varies per invoice
+     between Pre-Construction and Construction Trilogy Labor, so a
+     toggle is shown on the row and defaults from the draw's phase.
 
    The user types hours; rate, description, and cost code are locked. */
 const LABOR_PEOPLE = {
@@ -394,17 +393,10 @@ const LABOR_PEOPLE = {
     fullName: "Peyton Ladnier",
     shortName: "Peyton",
     rate: 125,
-    categories: {
-      preconstruction: {
-        label: "Pre-Construction Trilogy Labor",
-        costCode: "01000-05 Pre-Construction Trilogy Labor",
-        descriptionTail: "hours for pre-construction labor",
-      },
-      construction: {
-        label: "Construction Trilogy Labor",
-        costCode: "01000-05 Construction Trilogy Labor",
-        descriptionTail: "hours for construction labor",
-      },
+    fixedCategory: {
+      label: "Design Modeling",
+      costCode: "01000-03 Design Modeling",
+      descriptionTail: "hours for design modeling",
     },
   },
   habermaas: {
@@ -421,8 +413,8 @@ const LABOR_PEOPLE = {
 };
 
 // Look up the category for a labor row. For fixed-category people
-// (Rath, Habermaas), always the fixed category. For phased people
-// (Miller, Ladnier), the user-selected category (defaults to
+// (Rath, Ladnier, Habermaas), always the fixed category. For phased
+// people (Miller), the user-selected category (defaults to
 // preconstruction if unset).
 function laborCategory(s) {
   const person = LABOR_PEOPLE[s.laborPerson];
@@ -1137,8 +1129,8 @@ function SubRow({ s, updateSub, removeSub }) {
   }
 
   /* Labor row: locked rate, user types hours. For phased people
-     (Mark Miller, Peyton Ladnier), the category (Pre-Construction
-     vs. Construction) is also user-selected. */
+     (Mark Miller), the category (Pre-Construction vs. Construction)
+     is also user-selected. */
   if (s.kind === "labor") {
     return (
       <LaborSubRow s={s} updateSub={updateSub} removeSub={removeSub} />
@@ -1452,7 +1444,7 @@ export default function App() {
       // Phased people's category defaults from the project phase chosen
       // earlier (construction draws -> Construction Trilogy Labor),
       // and stays editable on the row. Only meaningful for people with
-      // categories (Miller, Ladnier); Rath and Habermaas have a fixed
+      // categories (Miller); Rath, Ladnier, and Habermaas have a fixed
       // category.
       laborCategory: phase === "construction"
         ? "construction" : "preconstruction",
