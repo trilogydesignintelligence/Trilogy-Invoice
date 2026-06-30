@@ -1237,6 +1237,64 @@ function inputStyle() {
   };
 }
 
+/* ---- Line-item reordering helpers ----
+   Pure list operations shared by the Partners (subs) and DesignWorks
+   (items) line lists. Rows carry a stable `id`, so reordering moves
+   DOM nodes without remounting the inputs inside them. */
+function reorderById(arr, fromId, toId) {
+  if (fromId == null || toId == null || fromId === toId) return arr;
+  const from = arr.findIndex((x) => x.id === fromId);
+  const to = arr.findIndex((x) => x.id === toId);
+  if (from < 0 || to < 0) return arr;
+  const next = arr.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+function swapById(arr, id, delta) {
+  const i = arr.findIndex((x) => x.id === id);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= arr.length) return arr;
+  const next = arr.slice();
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+}
+
+/* ============================================================
+   DragHandle — grip + up/down for reordering a line.
+   Top-level (stable identity). Only the handle is draggable, so it
+   never interferes with selecting or clicking the inputs in the row.
+   The ▲▼ buttons give a touch/keyboard path since native HTML5 drag
+   doesn't work on touch devices.
+   ============================================================ */
+function DragHandle({ onDragStart, onDragEnd, onUp, onDown, isFirst, isLast }) {
+  const miniBtn = (disabled) => ({
+    border: "none", background: "none", padding: 0, lineHeight: 1,
+    fontSize: 9, cursor: disabled ? "default" : "pointer",
+    color: disabled ? T.cream300 : T.burg600,
+  });
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      title="Drag to reorder"
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", gap: 3,
+        padding: "0 4px", cursor: "grab", userSelect: "none",
+        color: T.burg600,
+      }}
+    >
+      <button type="button" onClick={onUp} disabled={isFirst}
+        aria-label="Move up" style={miniBtn(isFirst)}>&#9650;</button>
+      <span style={{ fontSize: 13, lineHeight: 1 }}>&#10303;</span>
+      <button type="button" onClick={onDown} disabled={isLast}
+        aria-label="Move down" style={miniBtn(isLast)}>&#9660;</button>
+    </div>
+  );
+}
+
 /* ============================================================
    APP
    ============================================================ */
@@ -1267,6 +1325,19 @@ export default function App() {
   const [descriptionSummary, setDescriptionSummary] = useState("");
   const [summaryAutofilled, setSummaryAutofilled] = useState(false);
   const fileRef = useRef(null);
+  // Drag-reorder state. dragId is the row being dragged; overId is the
+  // row it's currently hovering, used to draw the drop indicator.
+  // Shared by both line lists (only one is visible at a time).
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
+  const moveSub = (fromId, toId) =>
+    setSubs((a) => reorderById(a, fromId, toId));
+  const moveItem = (fromId, toId) =>
+    setItems((a) => reorderById(a, fromId, toId));
+  const moveSubBy = (id, delta) => setSubs((a) => swapById(a, id, delta));
+  const moveItemBy = (id, delta) => setItems((a) => swapById(a, id, delta));
+  const clearDrag = () => { setDragId(null); setOverId(null); };
 
   const entity = entityKey ? ENTITIES[entityKey] : null;
 
@@ -1718,35 +1789,61 @@ export default function App() {
         <p style={S.sub}>
           Amount auto-fills as Quantity &times; Rate, but you can type
           it directly on rows where Rate isn&rsquo;t a true unit price.
+          Drag the handle (or use &#9650;&#9660;) to reorder.
         </p>
         <div style={{ display: "grid", gap: 10 }}>
-          {items.map((it) => {
+          {items.map((it, idx) => {
             const q = parseFloat(it.qty), r = parseFloat(it.rate);
             let amt = parseFloat(it.amount);
             if (isNaN(amt) && !isNaN(q) && !isNaN(r)) amt = q * r;
             return (
-              <div key={it.id} style={{
-                display: "grid",
-                gridTemplateColumns: "48px 1fr 64px 96px 24px",
-                gap: 8, alignItems: "center",
-              }}>
-                <input style={inputStyle()} value={it.qty} placeholder="Qty"
-                  onChange={(e) => updateItem(it.id, "qty", e.target.value)} />
-                <input style={inputStyle()} value={it.desc}
-                  placeholder="Description"
-                  onChange={(e) => updateItem(it.id, "desc", e.target.value)} />
-                <input style={inputStyle()} value={it.rate} placeholder="Rate"
-                  onChange={(e) => updateItem(it.id, "rate", e.target.value)} />
-                <input style={{ ...inputStyle(), textAlign: "right" }}
-                  value={it.amount}
-                  placeholder={!isNaN(amt) ? amt.toFixed(2) : "Amount"}
-                  onChange={(e) =>
-                    updateItem(it.id, "amount", e.target.value)} />
-                <button onClick={() => removeItem(it.id)} style={{
-                  border: "none", background: "none",
-                  cursor: "pointer", color: T.cream400,
-                  fontSize: 17, padding: 0,
-                }}>&times;</button>
+              <div key={it.id}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragId && overId !== it.id) setOverId(it.id);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragId) moveItem(dragId, it.id);
+                  clearDrag();
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  opacity: dragId === it.id ? 0.4 : 1,
+                  borderTop: overId === it.id && dragId && dragId !== it.id
+                    ? `2px solid ${T.burg700}` : "2px solid transparent",
+                  paddingTop: 2,
+                }}>
+                <DragHandle
+                  onDragStart={() => setDragId(it.id)}
+                  onDragEnd={clearDrag}
+                  onUp={() => moveItemBy(it.id, -1)}
+                  onDown={() => moveItemBy(it.id, 1)}
+                  isFirst={idx === 0}
+                  isLast={idx === items.length - 1} />
+                <div style={{
+                  flex: 1, minWidth: 0, display: "grid",
+                  gridTemplateColumns: "48px 1fr 64px 96px 24px",
+                  gap: 8, alignItems: "center",
+                }}>
+                  <input style={inputStyle()} value={it.qty} placeholder="Qty"
+                    onChange={(e) => updateItem(it.id, "qty", e.target.value)} />
+                  <input style={inputStyle()} value={it.desc}
+                    placeholder="Description"
+                    onChange={(e) => updateItem(it.id, "desc", e.target.value)} />
+                  <input style={inputStyle()} value={it.rate} placeholder="Rate"
+                    onChange={(e) => updateItem(it.id, "rate", e.target.value)} />
+                  <input style={{ ...inputStyle(), textAlign: "right" }}
+                    value={it.amount}
+                    placeholder={!isNaN(amt) ? amt.toFixed(2) : "Amount"}
+                    onChange={(e) =>
+                      updateItem(it.id, "amount", e.target.value)} />
+                  <button onClick={() => removeItem(it.id)} style={{
+                    border: "none", background: "none",
+                    cursor: "pointer", color: T.cream400,
+                    fontSize: 17, padding: 0,
+                  }}>&times;</button>
+                </div>
               </div>
             );
           })}
@@ -1811,21 +1908,49 @@ export default function App() {
             <div style={{
               fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 500,
               letterSpacing: ".12em", textTransform: "uppercase",
-              color: T.gold700, marginBottom: 10,
+              color: T.gold700, marginBottom: 4,
             }}>
               One line per sub invoice — review &amp; confirm
             </div>
+            <div style={{
+              fontFamily: FONT.bodySm, fontSize: 11.5, fontStyle: "italic",
+              color: T.cream400, marginBottom: 10, lineHeight: 1.5,
+            }}>
+              Drag the handle (or use &#9650;&#9660;) to reorder — this is
+              the order the lines appear on the invoice and packet.
+            </div>
             <div style={{ display: "grid", gap: 10 }}>
-              {[...subs]
-                .map((s, i) => ({ s, i }))
-                .sort((a, b) => {
-                  const o = { low: 0, medium: 1, high: 2 };
-                  return o[a.s.confidence] - o[b.s.confidence];
-                })
-                .map(({ s }) => (
-                  <SubRow key={s.id} s={s} phase={phase}
-                    updateSub={updateSub} removeSub={removeSub} />
-                ))}
+              {subs.map((s, idx) => (
+                <div key={s.id}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragId && overId !== s.id) setOverId(s.id);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragId) moveSub(dragId, s.id);
+                    clearDrag();
+                  }}
+                  style={{
+                    display: "flex", alignItems: "stretch", gap: 4,
+                    opacity: dragId === s.id ? 0.4 : 1,
+                    borderTop: overId === s.id && dragId && dragId !== s.id
+                      ? `2px solid ${T.burg700}` : "2px solid transparent",
+                    paddingTop: 2,
+                  }}>
+                  <DragHandle
+                    onDragStart={() => setDragId(s.id)}
+                    onDragEnd={clearDrag}
+                    onUp={() => moveSubBy(s.id, -1)}
+                    onDown={() => moveSubBy(s.id, 1)}
+                    isFirst={idx === 0}
+                    isLast={idx === subs.length - 1} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <SubRow s={s} phase={phase}
+                      updateSub={updateSub} removeSub={removeSub} />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
