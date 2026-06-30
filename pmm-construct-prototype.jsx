@@ -345,10 +345,19 @@ const gcFeeDescription = feeDescription;
 const gcFeeAmount = feeAmount;
 
 /* ---- Trilogy Labor lines ----
-   Two standing line items appear on every Trilogy Partners draw:
-   Michael Rath's hours at a locked $175/hr (always "Design Modeling")
-   and Mark Miller's hours at a locked $125/hr (category varies per
-   invoice between Pre-Construction and Construction Trilogy Labor).
+   Standing labor line items can appear on a Trilogy Partners draw.
+   Each person has a locked hourly rate; the user types hours and the
+   amount is hours x rate. People fall into two shapes:
+
+   - Fixed-category people (Michael Rath, Christiana Habermaas): their
+     work always books to one category/cost code (Design Modeling).
+     No phase toggle is shown.
+
+   - Phased people (Mark Miller, Peyton Ladnier): their category varies
+     per invoice between Pre-Construction and Construction Trilogy
+     Labor, so a toggle is shown on the row and defaults from the
+     draw's phase.
+
    The user types hours; rate, description, and cost code are locked. */
 const LABOR_PEOPLE = {
   rath: {
@@ -380,10 +389,40 @@ const LABOR_PEOPLE = {
       },
     },
   },
+  ladnier: {
+    key: "ladnier",
+    fullName: "Peyton Ladnier",
+    shortName: "Peyton",
+    rate: 125,
+    categories: {
+      preconstruction: {
+        label: "Pre-Construction Trilogy Labor",
+        costCode: "01000-05 Pre-Construction Trilogy Labor",
+        descriptionTail: "hours for pre-construction labor",
+      },
+      construction: {
+        label: "Construction Trilogy Labor",
+        costCode: "01000-05 Construction Trilogy Labor",
+        descriptionTail: "hours for construction labor",
+      },
+    },
+  },
+  habermaas: {
+    key: "habermaas",
+    fullName: "Christiana Habermaas",
+    shortName: "Christiana",
+    rate: 125,
+    fixedCategory: {
+      label: "Design Modeling",
+      costCode: "01000-03 Design Modeling",
+      descriptionTail: "hours for design modeling",
+    },
+  },
 };
 
-// Look up the category for a labor row. For Rath, always the fixed
-// category. For Miller, the user-selected category (defaults to
+// Look up the category for a labor row. For fixed-category people
+// (Rath, Habermaas), always the fixed category. For phased people
+// (Miller, Ladnier), the user-selected category (defaults to
 // preconstruction if unset).
 function laborCategory(s) {
   const person = LABOR_PEOPLE[s.laborPerson];
@@ -738,7 +777,10 @@ function LaborSubRow({ s, updateSub, removeSub }) {
   const person = LABOR_PEOPLE[s.laborPerson];
   const cat = laborCategory(s);
   const calcAmt = laborAmount(s);
-  const isMiller = s.laborPerson === "miller";
+  // Phased people (Miller, Ladnier) get a Pre-Construction /
+  // Construction toggle; fixed-category people (Rath, Habermaas)
+  // don't. The toggle and the hours-source hint both key off this.
+  const hasCategories = !!(person && person.categories);
   const hoursFileRef = useRef(null);
   const [parsingHours, setParsingHours] = useState(false);
 
@@ -790,7 +832,7 @@ function LaborSubRow({ s, updateSub, removeSub }) {
         }} aria-label="Remove">&times;</button>
       </div>
 
-      {isMiller && (
+      {hasCategories && (
         <div style={{ marginBottom: 10 }}>
           <div style={{
             fontFamily: FONT.mono, fontSize: 10,
@@ -840,7 +882,7 @@ function LaborSubRow({ s, updateSub, removeSub }) {
                 textTransform: "uppercase", color: T.burg700 }}>
                 Optional:
               </strong>{" "}
-              upload {isMiller ? "BT Daily Log" : "hours email"} PDF
+              upload {hasCategories ? "BT Daily Log" : "hours email"} PDF
               and Construct will read the total.
             </div>
             <button
@@ -1094,8 +1136,9 @@ function SubRow({ s, updateSub, removeSub }) {
     );
   }
 
-  /* Labor row: locked rate, user types hours. For Mark Miller, the
-     category (Pre-Construction vs. Construction) is also user-selected. */
+  /* Labor row: locked rate, user types hours. For phased people
+     (Mark Miller, Peyton Ladnier), the category (Pre-Construction
+     vs. Construction) is also user-selected. */
   if (s.kind === "labor") {
     return (
       <LaborSubRow s={s} updateSub={updateSub} removeSub={removeSub} />
@@ -1406,14 +1449,15 @@ export default function App() {
       qty: "1", rate: "", desc: "", amount: "",
       laborPerson,
       laborHours: "",
-      // Mark Miller's category defaults from the project phase chosen
+      // Phased people's category defaults from the project phase chosen
       // earlier (construction draws -> Construction Trilogy Labor),
-      // and stays editable on the row. Only meaningful for Miller;
-      // Rath has a fixed category.
+      // and stays editable on the row. Only meaningful for people with
+      // categories (Miller, Ladnier); Rath and Habermaas have a fixed
+      // category.
       laborCategory: phase === "construction"
         ? "construction" : "preconstruction",
-      // Optional hours-source PDF (BT Daily Log for Mark, email for
-      // Michael). Empty until the user uploads one.
+      // Optional hours-source PDF (BT Daily Log for phased crew,
+      // email for design). Empty until the user uploads one.
       laborSource: "", laborEntries: [], laborBasis: "",
       laborSourceOk: false,
       rawText: [], showRaw: false, pageCount: 0,
@@ -1855,6 +1899,14 @@ export default function App() {
           <button onClick={() => addLaborSub("miller")}
             style={S.btn("secondary", false)}>
             + Mark Miller hours
+          </button>
+          <button onClick={() => addLaborSub("ladnier")}
+            style={S.btn("secondary", false)}>
+            + Peyton Ladnier hours
+          </button>
+          <button onClick={() => addLaborSub("habermaas")}
+            style={S.btn("secondary", false)}>
+            + Christiana Habermaas hours
           </button>
         </div>
       </>
