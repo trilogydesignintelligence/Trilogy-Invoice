@@ -77,7 +77,8 @@ const ENTITIES = {
     numberShort: "Invoice #",
     hasFee: true,
     feeLabel: "Trilogy DesignWorks Administration and Supervision",
-    feeRate: 0.20,
+    // No standing rate: the percentage changes often, so it is typed
+    // on the Fee step for every invoice (usually 15–20%).
     uploadsItems: false,
   },
   partners: {
@@ -605,9 +606,16 @@ function rgb(hex) {
           parseInt(v.slice(4, 6), 16)];
 }
 
+// Display a fee rate (0.175) as a percent string ("17.5%").
+function pctText(rate) {
+  if (!isFinite(rate)) return "\u2014%";
+  return `${parseFloat((rate * 100).toFixed(2))}%`;
+}
+
 async function generateInvoicePdf(opts) {
   const { entity, billTo, number, date, lineItems,
-          feeBase, feeAmount, balanceDue, descriptionSummary } = opts;
+          feeBase, feeRate, feeAmount, balanceDue,
+          descriptionSummary } = opts;
   const JsPDF = await loadJsPdf();
   const doc = new JsPDF({ unit: "pt", format: "letter" });
   doc.addFileToVFS("EagleLight.ttf", EAGLE_LIGHT_B64);
@@ -718,7 +726,7 @@ async function generateInvoicePdf(opts) {
     doc.setFont("times", "italic").setFontSize(10);
     doc.setTextColor(...rgb(T.burg800));
     doc.text(entity.feeLabel, cDesc + 8, y + 16);
-    doc.text(`${fmt(feeBase)} \u00d7 ${Math.round(entity.feeRate * 100)}%`,
+    doc.text(`${fmt(feeBase)} \u00d7 ${pctText(feeRate)}`,
              cRate + 8, y + 16);
     doc.text(feeAmount ? fmt(feeAmount) : "",
              W - M - 8, y + 16, { align: "right" });
@@ -1317,6 +1325,8 @@ export default function App() {
   const [subs, setSubs] = useState([]);
   const [parsing, setParsing] = useState(0);
   const [feeBaseManual, setFeeBaseManual] = useState("");
+  // DesignWorks fee percentage, typed per invoice (no default).
+  const [feePct, setFeePct] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState("");
   // Invoice description summary — natural-language sentence shown on
@@ -1385,12 +1395,17 @@ export default function App() {
     return parseFloat(feeBaseManual) || 0;
   }, [entity, feeBaseManual]);
 
-  // DesignWorks-style standing fee (auto 20%). Distinct from the
+  // Fee rate as a fraction. Blank/invalid entry = NaN, which blocks
+  // the Fee step until a percentage is typed.
+  const feeRate = feePct.trim() === "" ? NaN : parseFloat(feePct) / 100;
+  const feeRateValid = isFinite(feeRate) && feeRate >= 0 && feeRate <= 1;
+
+  // DesignWorks-style fee (% typed per invoice). Distinct from the
   // per-line fee rows (GC/PM/Supervision) which are calculated by
   // the top-level feeAmount() helper. Named entityFeeAmount to avoid
   // shadowing.
   const entityFeeAmount = entity && entity.hasFee
-    ? feeBase * entity.feeRate : 0;
+    ? (feeRateValid ? feeBase * feeRate : 0) : 0;
   const balanceDue = itemsTotal + entityFeeAmount;
 
   // Build a mechanical first-draft summary from current line items.
@@ -1455,6 +1470,7 @@ export default function App() {
       case "Draw #":
       case "Invoice #": return number.trim().length > 0;
       case "Date": return !!date;
+      case "Fee": return feeRateValid;
       case "Upload subs":
         return subs.length > 0 && parsing === 0;
       case "Line items":
@@ -1715,7 +1731,7 @@ export default function App() {
                 }}>
                   {e.numberLabel} &nbsp;·&nbsp;{" "}
                   {e.hasFee
-                    ? `${Math.round(e.feeRate * 100)}% ${e.feeLabel}`
+                    ? `${e.feeLabel} (% set per invoice)`
                     : "GC Fee as line item"}
                   {" "}&nbsp;·&nbsp;{" "}
                   {e.uploadsItems
@@ -2037,13 +2053,27 @@ export default function App() {
       <>
         <h2 style={S.h}>{entity.feeLabel}</h2>
         <p style={S.sub}>
-          This fee is always {Math.round(entity.feeRate * 100)}% for
-          Trilogy DesignWorks, calculated from this invoice&rsquo;s
-          line items.
+          Enter this invoice&rsquo;s fee percentage (usually 15&ndash;20%,
+          but confirm the current rate), then the base it applies to.
         </p>
+        <label style={S.label}>Fee percentage</label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center",
+          marginBottom: 22 }}>
+          <input style={{ ...inputStyle(), maxWidth: 120 }}
+            value={feePct}
+            inputMode="decimal"
+            onChange={(e) =>
+              setFeePct(e.target.value.replace(/[^\d.]/g, ""))}
+            placeholder="e.g. 18" />
+          <span style={{ fontFamily: FONT.body, fontSize: 16,
+            color: T.burg800 }}>%</span>
+          {feePct.trim() !== "" && !feeRateValid && (
+            <span style={{ fontFamily: FONT.body, fontSize: 13,
+              color: T.burg700 }}>Enter a number from 0 to 100.</span>
+          )}
+        </div>
         <label style={S.label}>
-          Fee base — amount the {Math.round(entity.feeRate * 100)}%
-          applies to
+          Fee base — amount the percentage applies to
         </label>
         <div style={{ display: "flex", gap: 12,
           alignItems: "center", flexWrap: "wrap" }}>
@@ -2072,7 +2102,7 @@ export default function App() {
           <div style={{ marginTop: 6, display: "flex",
             justifyContent: "space-between", alignItems: "baseline" }}>
             <span>{money(feeBase)} &times;{" "}
-              {Math.round(entity.feeRate * 100)}%</span>
+              {pctText(feeRate)}</span>
             <span style={{ fontFamily: FONT.display, fontSize: 28,
               color: T.burg700 }}>{money(entityFeeAmount)}</span>
           </div>
@@ -2101,7 +2131,7 @@ export default function App() {
             ["Line items", `${lineItems.length} · ${money(itemsTotal)}`],
             ...(entity.hasFee
               ? [[entity.feeLabel,
-                  `${money(feeBase)} × ${Math.round(entity.feeRate*100)}% = ${money(entityFeeAmount)}`]]
+                  `${money(feeBase)} × ${pctText(feeRate)} = ${money(entityFeeAmount)}`]]
               : []),
             ["Balance Due", money(balanceDue)],
           ].map(([k, v], i, arr) => {
@@ -2306,7 +2336,7 @@ export default function App() {
             try {
               const name = await generateInvoicePdf({
                 entity, billTo, number, date, lineItems,
-                itemsTotal, feeBase,
+                itemsTotal, feeBase, feeRate,
                 feeAmount: entityFeeAmount,
                 balanceDue,
                 descriptionSummary,
@@ -2523,7 +2553,7 @@ export default function App() {
               }}>
                 <div style={{ padding: "6px 7px" }}>
                   {entity.feeLabel} — {money(feeBase)} &times;{" "}
-                  {Math.round(entity.feeRate * 100)}%
+                  {pctText(feeRate)}
                 </div>
                 <div style={{ padding: "6px 7px", textAlign: "right",
                   fontStyle: "normal" }}>
