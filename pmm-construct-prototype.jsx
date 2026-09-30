@@ -75,10 +75,11 @@ const ENTITIES = {
     ],
     numberLabel: "Invoice Number",
     numberShort: "Invoice #",
-    hasFee: true,
+    // No invoice-level fee. Each line item can carry its own fee %,
+    // which adds a separate fee line directly beneath it (see
+    // lineItems in App). feeLabel is that fee line's description.
+    hasFee: false,
     feeLabel: "Trilogy DesignWorks Administration and Supervision",
-    // No standing rate: the percentage changes often, so it is typed
-    // on the Fee step for every invoice (usually 15–20%).
     uploadsItems: false,
   },
   partners: {
@@ -612,10 +613,26 @@ function pctText(rate) {
   return `${parseFloat((rate * 100).toFixed(2))}%`;
 }
 
+// DesignWorks line item amount: typed amount, else qty x rate.
+function itemAmount(it) {
+  const q = parseFloat(it.qty), r = parseFloat(it.rate);
+  let amt = parseFloat(it.amount);
+  if (isNaN(amt) && !isNaN(q) && !isNaN(r)) amt = q * r;
+  return isNaN(amt) ? 0 : amt;
+}
+
+// Per-item fee rate as a fraction. Blank = 0 (no fee line);
+// unparseable or over 100% = NaN (blocks Next until fixed).
+function itemFeeRate(it) {
+  const t = String(it.feePct || "").trim();
+  if (t === "") return 0;
+  const v = parseFloat(t) / 100;
+  return isFinite(v) && v >= 0 && v <= 1 ? v : NaN;
+}
+
 async function generateInvoicePdf(opts) {
   const { entity, billTo, number, date, lineItems,
-          feeBase, feeRate, feeAmount, balanceDue,
-          descriptionSummary } = opts;
+          balanceDue, descriptionSummary } = opts;
   const JsPDF = await loadJsPdf();
   const doc = new JsPDF({ unit: "pt", format: "letter" });
   doc.addFileToVFS("EagleLight.ttf", EAGLE_LIGHT_B64);
@@ -710,6 +727,7 @@ async function generateInvoicePdf(opts) {
       String(it.desc || ""), cRate - cDesc - 14);
     const thisH = Math.max(rowH, descLines.length * 13 + 11);
     doc.line(M, y + thisH, W - M, y + thisH);
+    doc.setFont("times", it.isFee ? "italic" : "normal");
     doc.text(String(it.qty || ""), cQty + 8, y + 16);
     descLines.forEach((ln, k) => doc.text(ln, cDesc + 8, y + 16 + k * 13));
     doc.text(String(it.rate || ""), cRate + 8, y + 16);
@@ -718,20 +736,6 @@ async function generateInvoicePdf(opts) {
     y += thisH;
   });
 
-  if (entity.hasFee) {
-    doc.setFillColor(...rgb(T.cream100));
-    doc.rect(M, y, W - 2 * M, rowH, "F");
-    doc.setDrawColor(...rgb(T.cream300));
-    doc.line(M, y + rowH, W - M, y + rowH);
-    doc.setFont("times", "italic").setFontSize(10);
-    doc.setTextColor(...rgb(T.burg800));
-    doc.text(entity.feeLabel, cDesc + 8, y + 16);
-    doc.text(`${fmt(feeBase)} \u00d7 ${pctText(feeRate)}`,
-             cRate + 8, y + 16);
-    doc.text(feeAmount ? fmt(feeAmount) : "",
-             W - M - 8, y + 16, { align: "right" });
-    y += rowH;
-  }
 
   // Balance Due band
   const balH = 38;
@@ -1320,13 +1324,10 @@ export default function App() {
   const [date, setDate] = useState(() =>
     new Date().toISOString().slice(0, 10));
   const [items, setItems] = useState([
-    { id: nextId(), qty: "1", desc: "", rate: "", amount: "" },
+    { id: nextId(), qty: "1", desc: "", rate: "", amount: "", feePct: "" },
   ]);
   const [subs, setSubs] = useState([]);
   const [parsing, setParsing] = useState(0);
-  const [feeBaseManual, setFeeBaseManual] = useState("");
-  // DesignWorks fee percentage, typed per invoice (no default).
-  const [feePct, setFeePct] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState("");
   // Invoice description summary — natural-language sentence shown on
@@ -1377,11 +1378,20 @@ export default function App() {
         };
       });
     }
-    return items.map((it) => {
-      const q = parseFloat(it.qty), r = parseFloat(it.rate);
-      let amt = parseFloat(it.amount);
-      if (isNaN(amt) && !isNaN(q) && !isNaN(r)) amt = q * r;
-      return { ...it, amount: isNaN(amt) ? 0 : amt };
+    // DesignWorks: each item, followed by its own fee line when a
+    // fee % is entered on it. Fee = item amount x that item's %.
+    return items.flatMap((it) => {
+      const amount = itemAmount(it);
+      const row = { ...it, amount };
+      const rate = itemFeeRate(it);
+      if (!(rate > 0) || !amount) return [row];
+      const label = entity ? entity.feeLabel : "Fee";
+      return [row, {
+        id: it.id + "-fee", isFee: true, qty: "",
+        desc: `${label} (${pctText(rate)} of ${money(amount)})`,
+        rate: pctText(rate),
+        amount: Math.round(amount * rate * 100) / 100,
+      }];
     });
   }, [entity, items, subs, phase]);
 
@@ -1390,23 +1400,7 @@ export default function App() {
     [lineItems]
   );
 
-  const feeBase = useMemo(() => {
-    if (!entity || !entity.hasFee) return 0;
-    return parseFloat(feeBaseManual) || 0;
-  }, [entity, feeBaseManual]);
-
-  // Fee rate as a fraction. Blank/invalid entry = NaN, which blocks
-  // the Fee step until a percentage is typed.
-  const feeRate = feePct.trim() === "" ? NaN : parseFloat(feePct) / 100;
-  const feeRateValid = isFinite(feeRate) && feeRate >= 0 && feeRate <= 1;
-
-  // DesignWorks-style fee (% typed per invoice). Distinct from the
-  // per-line fee rows (GC/PM/Supervision) which are calculated by
-  // the top-level feeAmount() helper. Named entityFeeAmount to avoid
-  // shadowing.
-  const entityFeeAmount = entity && entity.hasFee
-    ? (feeRateValid ? feeBase * feeRate : 0) : 0;
-  const balanceDue = itemsTotal + entityFeeAmount;
+  const balanceDue = itemsTotal;
 
   // Build a mechanical first-draft summary from current line items.
   // Used as the pre-fill for the editable description field on Review.
@@ -1433,6 +1427,7 @@ export default function App() {
     const month = MONTHS[monthIdx];
 
     const items = lineItems
+      .filter((it) => !it.isFee)
       .map((it) => (it.desc || "").trim())
       .filter((d) => d.length > 0);
     if (items.length === 0) {
@@ -1457,7 +1452,7 @@ export default function App() {
       ? ["Type", "Phase", "Client", "Draw #", "Date",
          "Upload subs", "Review"]
       : ["Type", "Client", "Invoice #", "Date", "Line items",
-         "Fee", "Review"];
+         "Review"];
 
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
@@ -1470,11 +1465,11 @@ export default function App() {
       case "Draw #":
       case "Invoice #": return number.trim().length > 0;
       case "Date": return !!date;
-      case "Fee": return feeRateValid;
       case "Upload subs":
         return subs.length > 0 && parsing === 0;
       case "Line items":
-        return items.some((i) => i.desc.trim());
+        return items.some((i) => i.desc.trim())
+          && items.every((i) => !isNaN(itemFeeRate(i)));
       default: return true;
     }
   };
@@ -1485,7 +1480,7 @@ export default function App() {
       arr.map((it) => (it.id === id ? { ...it, [field]: val } : it)));
   const addItem = () =>
     setItems((arr) => [...arr,
-      { id: nextId(), qty: "1", desc: "", rate: "", amount: "" }]);
+      { id: nextId(), qty: "1", desc: "", rate: "", amount: "", feePct: "" }]);
   const removeItem = (id) =>
     setItems((arr) => arr.length > 1
       ? arr.filter((it) => it.id !== id) : arr);
@@ -1730,9 +1725,9 @@ export default function App() {
                   textTransform: "uppercase",
                 }}>
                   {e.numberLabel} &nbsp;·&nbsp;{" "}
-                  {e.hasFee
-                    ? `${e.feeLabel} (% set per invoice)`
-                    : "GC Fee as line item"}
+                  {e.uploadsItems
+                    ? "GC Fee as line item"
+                    : "fee % set per line item"}
                   {" "}&nbsp;·&nbsp;{" "}
                   {e.uploadsItems
                     ? "one line per uploaded sub invoice"
@@ -1805,6 +1800,9 @@ export default function App() {
         <p style={S.sub}>
           Amount auto-fills as Quantity &times; Rate, but you can type
           it directly on rows where Rate isn&rsquo;t a true unit price.
+          Enter a <strong>Fee %</strong> on any line that carries the
+          Admin &amp; Supervision fee; it adds its own fee line beneath
+          that item. Leave it blank for no fee.
           Drag the handle (or use &#9650;&#9660;) to reorder.
         </p>
         <div style={{ display: "grid", gap: 10 }}>
@@ -1839,7 +1837,7 @@ export default function App() {
                   isLast={idx === items.length - 1} />
                 <div style={{
                   flex: 1, minWidth: 0, display: "grid",
-                  gridTemplateColumns: "48px 1fr 64px 96px 24px",
+                  gridTemplateColumns: "48px 1fr 64px 96px 64px 24px",
                   gap: 8, alignItems: "center",
                 }}>
                   <input style={inputStyle()} value={it.qty} placeholder="Qty"
@@ -1854,11 +1852,29 @@ export default function App() {
                     placeholder={!isNaN(amt) ? amt.toFixed(2) : "Amount"}
                     onChange={(e) =>
                       updateItem(it.id, "amount", e.target.value)} />
+                  <input style={{ ...inputStyle(), textAlign: "right",
+                      borderColor: isNaN(itemFeeRate(it))
+                        ? T.burg700 : undefined }}
+                    value={it.feePct || ""} placeholder="Fee %"
+                    inputMode="decimal"
+                    title="Admin & Supervision fee % for this line (blank = no fee)"
+                    onChange={(e) => updateItem(it.id, "feePct",
+                      e.target.value.replace(/[^\d.]/g, ""))} />
                   <button onClick={() => removeItem(it.id)} style={{
                     border: "none", background: "none",
                     cursor: "pointer", color: T.cream400,
                     fontSize: 17, padding: 0,
                   }}>&times;</button>
+                  {itemFeeRate(it) > 0 && !isNaN(amt) && amt > 0 && (
+                    <div style={{ gridColumn: "2 / 6", marginTop: -2,
+                      fontFamily: FONT.body, fontSize: 12.5,
+                      fontStyle: "italic", color: T.burg800,
+                      textAlign: "right" }}>
+                      + fee line: {pctText(itemFeeRate(it))} of{" "}
+                      {money(amt)} = {money(
+                        Math.round(amt * itemFeeRate(it) * 100) / 100)}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -2048,69 +2064,6 @@ export default function App() {
     );
   }
 
-  function renderFeeStep() {
-    return (
-      <>
-        <h2 style={S.h}>{entity.feeLabel}</h2>
-        <p style={S.sub}>
-          Enter this invoice&rsquo;s fee percentage (usually 15&ndash;20%,
-          but confirm the current rate), then the base it applies to.
-        </p>
-        <label style={S.label}>Fee percentage</label>
-        <div style={{ display: "flex", gap: 8, alignItems: "center",
-          marginBottom: 22 }}>
-          <input style={{ ...inputStyle(), maxWidth: 120 }}
-            value={feePct}
-            inputMode="decimal"
-            onChange={(e) =>
-              setFeePct(e.target.value.replace(/[^\d.]/g, ""))}
-            placeholder="e.g. 18" />
-          <span style={{ fontFamily: FONT.body, fontSize: 16,
-            color: T.burg800 }}>%</span>
-          {feePct.trim() !== "" && !feeRateValid && (
-            <span style={{ fontFamily: FONT.body, fontSize: 13,
-              color: T.burg700 }}>Enter a number from 0 to 100.</span>
-          )}
-        </div>
-        <label style={S.label}>
-          Fee base — amount the percentage applies to
-        </label>
-        <div style={{ display: "flex", gap: 12,
-          alignItems: "center", flexWrap: "wrap" }}>
-          <input style={{ ...inputStyle(), maxWidth: 260 }}
-            value={feeBaseManual}
-            onChange={(e) => setFeeBaseManual(e.target.value)}
-            placeholder="0.00" />
-          <button
-            onClick={() => setFeeBaseManual(itemsTotal.toFixed(2))}
-            style={S.btn("ghost", false)}>
-            Use line-item total ({money(itemsTotal)})
-          </button>
-        </div>
-        <div style={{
-          marginTop: 28, padding: "18px 22px",
-          background: T.gold100,
-          border: `1px solid ${T.gold400}`,
-          borderRadius: 6, fontFamily: FONT.body, fontSize: 14,
-          color: T.burg900,
-        }}>
-          <span style={{ fontFamily: FONT.mono, fontSize: 11,
-            color: T.gold700, letterSpacing: ".12em",
-            textTransform: "uppercase" }}>
-            Calculated Fee
-          </span>
-          <div style={{ marginTop: 6, display: "flex",
-            justifyContent: "space-between", alignItems: "baseline" }}>
-            <span>{money(feeBase)} &times;{" "}
-              {pctText(feeRate)}</span>
-            <span style={{ fontFamily: FONT.display, fontSize: 28,
-              color: T.burg700 }}>{money(entityFeeAmount)}</span>
-          </div>
-        </div>
-      </>
-    );
-  }
-
   function renderReview() {
     return (
       <>
@@ -2129,10 +2082,6 @@ export default function App() {
             [entity.numberLabel, number || "—"],
             ["Date", date],
             ["Line items", `${lineItems.length} · ${money(itemsTotal)}`],
-            ...(entity.hasFee
-              ? [[entity.feeLabel,
-                  `${money(feeBase)} × ${pctText(feeRate)} = ${money(entityFeeAmount)}`]]
-              : []),
             ["Balance Due", money(balanceDue)],
           ].map(([k, v], i, arr) => {
             const last = i === arr.length - 1;
@@ -2336,8 +2285,7 @@ export default function App() {
             try {
               const name = await generateInvoicePdf({
                 entity, billTo, number, date, lineItems,
-                itemsTotal, feeBase, feeRate,
-                feeAmount: entityFeeAmount,
+                itemsTotal,
                 balanceDue,
                 descriptionSummary,
               });
@@ -2416,7 +2364,6 @@ export default function App() {
       );
       case "Upload subs": return renderUploadStep();
       case "Line items": return renderItemsStep();
-      case "Fee": return renderFeeStep();
       case "Review": return renderReview();
       default: return null;
     }
@@ -2542,25 +2489,6 @@ export default function App() {
                 </div>
               </div>
             ))}
-            {entity.hasFee && (
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 90px",
-                background: T.cream100,
-                borderBottom: `1px solid ${T.cream200}`,
-                fontFamily: FONT.body, fontSize: 10.5,
-                color: T.burg800, fontStyle: "italic",
-              }}>
-                <div style={{ padding: "6px 7px" }}>
-                  {entity.feeLabel} — {money(feeBase)} &times;{" "}
-                  {pctText(feeRate)}
-                </div>
-                <div style={{ padding: "6px 7px", textAlign: "right",
-                  fontStyle: "normal" }}>
-                  {entityFeeAmount ? money(entityFeeAmount) : "\u00a0"}
-                </div>
-              </div>
-            )}
             <div style={{
               display: "grid", gridTemplateColumns: "1fr 110px",
               background: T.burg700, color: T.cream50,
